@@ -1,6 +1,6 @@
 %% Test example data
 % Add the full path to your output folder from x.heatmapPrep as a string
-% E.g., ''~/Downloads/spinalcordplot-main/heatmap_output'
+% E.g., '~/Downloads/spinalcordplot-main/heatmap_output'
 input_folder=
 
 % Adjust this for tissue type / longitudinal level organization (1 or 0)
