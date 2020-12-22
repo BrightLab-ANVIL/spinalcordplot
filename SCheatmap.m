@@ -203,6 +203,10 @@ physRVT_conv=physRVT_conv-mean(physRVT_conv);
 physO2_conv=physO2_conv-mean(physO2_conv);
 % Define caxis bounds for heatmap
 c1=-0.4; c2=-c1;
+% Do more checks (equal lengths)
+if ~isequal(size(heatmap,2),length(physHR), length(physCO2), length(physRVT), length(physO2), size(motion,1))
+    error('Length of traces does not match number of TRs (%d). Check fMRI data, physiological traces, and motion traces.', size(heatmap,2))
+end
 %% Plot data ordered by tissue
 if bySlice==0
     %%%%%% Set phys data to plot:
@@ -216,6 +220,8 @@ if bySlice==0
     xlabel('{\bfTRs}')
     colormap gray
     caxis([c1 c2])
+    % Draw white line b/t tissue types
+    line([0 nRow], [gmEnds+0.5 gmEnds+0.5],'Color','white','LineWidth',0.7) 
 
     % Add physio
     subplot(411)
@@ -225,8 +231,6 @@ if bySlice==0
     plot(phys(:,2),'g','LineWidth',1.5); xlim([0 length(phys)])
     ylabel({'{\bfHR}','[bpm]'},'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
 
-    % Draw white line b/t tissue types
-    line([0 nRow], [gmEnds+0.5 gmEnds+0.5],'Color','white','LineWidth',0.7) 
     % Semi-manually define FSL's greengray colormap (using polynomials)
     x=1:256; p1 = -7.3246e-20; p2 = 7.6618e-17; p3 = -3.2357e-14; p4 = 7.0892e-12; p5 = -8.6807e-10;
     p6 = 5.9635e-08; p7 = -1.9699e-06; p8 = 1.1824e-05; p9 = 0.0010542; p10 = -0.0020195;
@@ -240,8 +244,8 @@ if bySlice==0
     d3 = p1.*x.^9 + p2.*x.^8 + p3.*x.^7 + p4.*x.^6 + p5.*x.^5 + p6.*x.^4 + p7.*x.^3 + p8.*x.^2 + p9.*x + p10 ;
     d3(256)=1;
     greengrayMap=[d1' d2' d3'];
-    % Load FSL's colormap:
-    % greengrayMap=load('/usr/local/fsl/fslpython/envs/fslpython/lib/python3.7/site-packages/fsleyes/assets/colourmaps/brain_colours/greengray.cmap');
+%     Load FSL's colormap:
+%     greengrayMap=load('/usr/local/fsl/fslpython/envs/fslpython/lib/python3.7/site-packages/fsleyes/assets/colourmaps/brain_colours/greengray.cmap');
     tissueTypes=ones(size(maskts,2),3);
     tissueTypes(:,1)=size(maskts,2):-1:1;
     idx=1;
@@ -437,7 +441,7 @@ if moco_loc
     magMap = [linspace(0,1,256)', zeros(256,1), linspace(0,1,256)'];
     rotationsMap = [linspace(0,1,256)', linspace(0,0.5686,256)', zeros(256,1)];
     translationsMap = [linspace(0,1,256)', zeros(256,1), zeros(256,1)];
-    figure('Name','GLM and Regressors','Renderer', 'painters','Position',[50 1000 830 950])
+    figure('Name','GLM and Regressors','Renderer', 'painters','Position',[50 1 693 804])%[50 1000 830 944])
     % Physio ( Position: [x0 y0 width height] )
     subplot('Position',[0.13 0.8472 0.3347 0.0604])
     plot(physCO2,'c','LineWidth',1.5); xlim([0 length(physCO2)]); set(gca,'xtick',[],'FontSize',12)
@@ -450,7 +454,7 @@ if moco_loc
     two_sd=2*std2(heatmap);
     subplot('Position', [0.13 0.6131 0.3347 0.1442])
     imagesc(heatmap)
-    set(gca,'YTickLabel',[],'FontSize',12); pbaspect([2 1 1])
+    set(gca,'YTickLabel',[],'FontSize',11); pbaspect([2 1 1])
     caxis([c1 c2])
     xlabel('{\bfTRs}')
     colormap gray
@@ -522,7 +526,7 @@ if moco_loc
     tstats_CO2_sort=sortrows(temp_sorter,1,'descend');
     tstats_CO2_sort=tstats_CO2_sort(:,2:end);
     % Physio
-    figure('Name','Plot data by HR t-statistic magnitude','Renderer', 'painters', 'Position', [50 1000 1457 648])
+    figure('Name','Plot data by HR t-statistic magnitude','Renderer', 'painters', 'Position', [50 1000 1398 621])%1457 648])
     subplot(4,2,1)
     plot(physCO2,'c','LineWidth',1.5); xlim([0 length(physCO2)]); set(gca,'xtick',[],'FontSize',12)
     ylabel({'{\bfP_{ET}CO_{2}}','[mmHg]'},'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
@@ -555,7 +559,7 @@ if moco_loc
     tstats_HR_sort=tstats_HR_sort(:,2:end);
     clear temp_sorter
     % Physio
-    figure('Name','Plot data by HR t-statistic magnitude','Renderer', 'painters', 'Position', [50 1000 1457 648])
+    figure('Name','Plot data by HR t-statistic magnitude','Renderer', 'painters', 'Position', [50 1000 1398 621])%1457 648])
     subplot(4,2,1)
     plot(physCO2,'c','LineWidth',1.5); xlim([0 length(physCO2)]); set(gca,'xtick',[],'FontSize',12)
     ylabel({'{\bfP_{ET}CO_{2}}','[mmHg]'},'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
