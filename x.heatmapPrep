@@ -221,7 +221,7 @@ mv ${outputdir}/tempTemp.txt ${outputdir}/maskDescriptions.txt
 m=0
 for mask in ${outputdir}/mask*.nii.gz
 do
-	echo "Processing mask $mask"
+	echo "Processing mask $m"
   fslmeants -i ${func} -m ${mask} --showall > ${outputdir}/mask${m}ts.txt
   m=$(( m+1 ))
 done
@@ -257,7 +257,39 @@ fsleyes func_mean.nii.gz ${levels} -cm blue-lightblue &
 # Calculate DVARS trace using PAM50_cord as the mask
 3dTto1D -input ${func} -mask ${input} -method dvars -prefix ${outputdir}/dvars.txt
 ###############################################################################
-
+# Extract 8 largest tracts by volume, binarize then extract ts (WIP)
+# Binarize masks
+mkdir ${outputdir}/tracts
+fslmaths atlas/PAM50_atlas_04.nii.gz -thr 0.5 -bin ${outputdir}/tracts/LLC_mask.nii.gz # Left lateral corticospinal
+fslmaths atlas/PAM50_atlas_05.nii.gz -thr 0.5 -bin ${outputdir}/tracts/RLC_mask.nii.gz # Right lateral corticospinal
+fslmaths atlas/PAM50_atlas_22.nii.gz -thr 0.5 -bin ${outputdir}/tracts/LVC_mask.nii.gz # Left ventral corticospinal
+fslmaths atlas/PAM50_atlas_23.nii.gz -thr 0.5 -bin ${outputdir}/tracts/RVC_mask.nii.gz # Right ventral corticospinal
+fslmaths atlas/PAM50_atlas_02.nii.gz -thr 0.5 -bin ${outputdir}/tracts/LFC_mask.nii.gz # Left fasciculus cuneatus
+fslmaths atlas/PAM50_atlas_03.nii.gz -thr 0.5 -bin ${outputdir}/tracts/RFC_mask.nii.gz # Right fasciculus cuneatus
+fslmaths atlas/PAM50_atlas_00.nii.gz -thr 0.5 -bin ${outputdir}/tracts/LFG_mask.nii.gz # Left fasciculus gracilis
+fslmaths atlas/PAM50_atlas_01.nii.gz -thr 0.5 -bin ${outputdir}/tracts/RFG_mask.nii.gz # Right fasciculus gracilis
+# Extract timeseries
+fslmeants -i ${func} -m ${outputdir}/tracts/LLC_mask.nii.gz --showall > ${outputdir}/tracts/LLCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/RLC_mask.nii.gz --showall > ${outputdir}/tracts/RLCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/LVC_mask.nii.gz --showall > ${outputdir}/tracts/LVCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/RVC_mask.nii.gz --showall > ${outputdir}/tracts/RVCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/LFC_mask.nii.gz --showall > ${outputdir}/tracts/LFCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/RFC_mask.nii.gz --showall > ${outputdir}/tracts/RFCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/LFG_mask.nii.gz --showall > ${outputdir}/tracts/LFGts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/RFG_mask.nii.gz --showall > ${outputdir}/tracts/RFGts.txt
+###############################################################################
+# Smoothing (WIP)
+echo "\nBlurring func data in masks\n"
+3dblurinmask -input ${func} -FWHM 2 -Mmask ${outputdir}/allMaskVisualization.nii.gz \
+-prefix ${outputdir}/func_blur_inMask.nii.gz -preserve -quiet
+# Calculate blurred timeseries for each mask:
+m=0
+for mask in ${outputdir}/mask*.nii.gz
+do
+	echo "Processing mask $m in func_blur_inMask.nii.gz"
+  fslmeants -i ${outputdir}/func_blur_inMask.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
+  m=$(( m+1 ))
+done
 ###############################################################################
 echo ""
 echo -e "\e[1;35m... done! Runtime: $SECONDS seconds.\e[0m"

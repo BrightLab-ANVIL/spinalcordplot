@@ -1,11 +1,11 @@
-function [heatmap,voxelDir,tstats]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,phys_prefix,phys_loc,moco_loc)
+function [heatmap,voxelDir,tstats]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,phys_prefix,phys_loc,options)
 % DESCRIPTION
 % Use masks created by the x.carpetPlots and produce the carpet plot
 % figures in time and frequency domains, plotted with regressors, and
 % alongside t-stats.
 % 
 % USAGE 
-% SCheatmap(input_folder,write_out,bySlice,useLevels,TR,phys_prefix,phys_loc,moco_loc)
+% SCheatmap(input_folder,write_out,bySlice,useLevels,TR,phys_prefix,phys_loc,"mocoLoc","~/path/moco.txt","mocoLabel",["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
 %
 % 
 % MANDATORY ARGUMENTS
@@ -17,10 +17,16 @@ function [heatmap,voxelDir,tstats]=SCheatmap(input_folder,write_out,bySlice,useL
 % TR ----------------->  TR in seconds
 % phys_prefix -------->  phys regressor prefix  -  e.g. 'sub-03_ses-BH'
 % phys_loc ----------->  full path to phys regressors folder
-% GLM ---------------->  1 or 0: to use the GLM                             (WIP)
-% task --------------->  specify which regressor is the task (full path?)         (WIP)
-% moco_loc ----------->  OPTIONAL: full path to 6DOF motion traces (i.e. mc.txt)
-%                        enter empty brackets otherwise: []
+% % % GLM ---------------->  1 or 0: to use the GLM                             (WIP)
+% % % task --------------->  specify which regressor is the task (full path?)         (WIP)
+%
+% OPTIONAL NAME-VALUE PAIR ARGUMENTS
+% "mocoLoc", "/path/file.txt" ------------------> OPTIONAL: full path to 6DOF motion traces file
+%                                                 (default: ["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+% "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"] -> order of columns
+% "cBound", 0.3 --------------------------------> caxis abs value of limit around zero (default: 0.4)
+% "PlotSmoothData", 1 --------------------------> 1 or 0: 1 will plot smoothed data (default: 0)
+% 
 % 
 % 
 % OUTPUTS
@@ -33,16 +39,37 @@ function [heatmap,voxelDir,tstats]=SCheatmap(input_folder,write_out,bySlice,useL
 % Concepts inspired by Power et al. 2017
 
 %% Do checks and add paths
-if nargin ~= 8
+arguments
+    input_folder (1,:) char
+    write_out (1,1) {mustBeMember(write_out,[0,1])}
+    bySlice (1,1) {mustBeMember(bySlice,[0,1])}
+    useLevels (1,1) {mustBeMember(useLevels,[0,1])}
+    TR (1,1) {mustBeNumeric}
+    phys_prefix (1,:) char
+    phys_loc (1,:) char
+    options.mocoLoc (1,1) string = "-"
+    options.mocoLabel (1,6) string = ["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"]
+    options.cBound (1,1) double = 0.4
+    options.PlotSmoothData (1,1) double = 0
+end
+if nargin < 7
     help SCheatmap
-    error('Incorrect number of input arguments!')
+    error('Minimum number of input arguments (7) not met!')
 end
 close all
 addpath(input_folder)
 addpath(phys_loc)
 fprintf('\nBeginning... \n \n')
 %% Load data
-maskdir=dir([input_folder '/mask*ts.txt']);
+options.PlotSmoothData=0; % WIP, delete this line later %
+if options.PlotSmoothData==0
+    maskdir=dir([input_folder '/mask*ts.txt']);
+elseif options.PlotSmoothData==1
+    fprintf('/nUsing data smoothed within masks.\n')
+    maskdir=dir([input_folder '/blur_mask*ts.txt']);
+else
+    error('PlotSmoothData input argument not binary.')
+end
 % Loop through tissue type masks to load data
 maskts={};
 for i=1:size(maskdir,1)
@@ -185,24 +212,27 @@ physHR=load(strcat(phys_prefix,'_HR.txt'));
 physCO2=load(strcat(phys_prefix,'_CO2.txt'));
 physRVT=load(strcat(phys_prefix,'_RVT.txt'));
 physO2=load(strcat(phys_prefix,'_O2.txt'));
-% Load motion and demean
-if moco_loc
-    motion=load(moco_loc);
+% Load motion and demean (if exists)
+if options.mocoLoc ~= "-"
+    motion=load(options.mocoLoc);
     for i=1:size(motion,2)
         motion(:,i)=motion(:,i)-mean(motion(:,i));
     end
     if size(motion,2) ~=6
-        moco_loc=[];
+%         mocoLoc=[];
         warning('Motion file does not have 6 columns. Will ignore.')
     end
+else
+    % Define dummy vector to pass equal length check below
+    motion=zeros(size(heatmap,2),1);
 end
 % Demean convolved physiological regressors
 physHR_conv=physHR_conv-mean(physHR_conv);
 physCO2_conv=physCO2_conv-mean(physCO2_conv);
 physRVT_conv=physRVT_conv-mean(physRVT_conv);
 physO2_conv=physO2_conv-mean(physO2_conv);
-% Define caxis bounds for heatmap
-c1=-0.4; c2=-c1;
+% Define caxis bounds for heatmap (user input or default 0.4)
+c1=-options.cBound; c2=options.cBound;
 % Do more checks (equal lengths)
 if ~isequal(size(heatmap,2),length(physHR), length(physCO2), length(physRVT), length(physO2), size(motion,1))
     error('Length of traces does not match number of TRs (%d). Check fMRI data, physiological traces, and motion traces.', size(heatmap,2))
@@ -400,7 +430,7 @@ title({'{\bfHR}'})
 xlim([0 0.25])
 
 %% Run GLM
-if moco_loc
+if options.mocoLoc ~= "-"
     X=[ones(size(heatmap,2),1) physCO2_conv physHR_conv motion];
     % Demean the design matrix
     for i=2:size(X,2)
@@ -434,7 +464,7 @@ else
     tstats=[];
 end
 %% Motion, phys, GLM plot
-if moco_loc
+if options.mocoLoc ~= "-"
     % Define colormaps
     greenMap = [zeros(256,1), linspace(0,1,256)', zeros(256,1)];
     cyanMap = [zeros(256,1), linspace(0,1,256)', linspace(0,1,256)'];
@@ -488,22 +518,22 @@ if moco_loc
     % Motion regressors
     subplot('Position',[0.13 0.5292-0.01 0.3347 0.0525]) % Rx 
     plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
-    ylabel('R_x','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    ylabel(options.mocoLabel(1),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
     subplot('Position',[0.13 0.4707-0.01 0.3347 0.0525]) % Ry 
     plot(motion(:,2),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
-    ylabel('R_y','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    ylabel(options.mocoLabel(2),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
     subplot('Position',[0.13 0.4122-0.01 0.3347 0.0525]) % Rz 
     plot(motion(:,3),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
-    ylabel('R_z','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    ylabel(options.mocoLabel(3),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
     subplot('Position',[0.13 0.3537-0.01 0.3347 0.0525]) % Tx 
     plot(motion(:,4),'Color',[1 0 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
-    ylabel('T_x','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    ylabel(options.mocoLabel(4),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
     subplot('Position',[0.13 0.2952-0.01 0.3347 0.0525]) % Ty 
     plot(motion(:,5),'Color',[1 0 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
-    ylabel('T_y','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    ylabel(options.mocoLabel(5),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
     subplot('Position',[0.13 0.2367-0.01 0.3347 0.0525]) % Tz 
     plot(motion(:,6),'Color',[1 0 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
-    ylabel('T_z','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    ylabel(options.mocoLabel(6),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
     % GLM tstats ( Position: [x0 y0 width height] )
     subplot('Position',[0.4680 0.6131 0.0419 0.1442]) % CO2
     imagesc(abs(tstats(:,1))); set(gca,'xtick',[],'ytick',[]); colormap(gca,cyanMap); caxis([0 5])
@@ -516,7 +546,7 @@ if moco_loc
     imagesc(abs(tstats(:,6:8))); set(gca,'xtick',[],'ytick',[],'FontSize',12);  colormap(gca,translationsMap); caxis([0 5])
 end
 %% Reorganize data and plot by t-statistic magnitude (CO2)
-if moco_loc
+if options.mocoLoc ~= "-"
     % CO2 heatmap
     temp_sorter=[abs(tstats(:,1)) heatmap];
     heatmap_CO2_sort=sortrows(temp_sorter,1,'descend');
@@ -548,7 +578,7 @@ if moco_loc
 end
 
 %% Reorganize data and plot by t-statistic magnitude (HR)
-if moco_loc
+if options.mocoLoc ~= "-"
     % HR heatmap
     temp_sorter=[abs(tstats(:,2)) heatmap];
     heatmap_HR_sort=sortrows(temp_sorter,1,'descend');
@@ -581,7 +611,7 @@ if moco_loc
 end
 
 %% Condensed motion regressor plot
-if moco_loc
+if options.mocoLoc ~= "-"
     figure('Name','Translations and Rotations','Renderer', 'painters', 'Position', [50 1000 683 700])
     subplot(4,1,[1,2])
     imagesc(heatmap)
@@ -599,7 +629,11 @@ if moco_loc
     plot(motion(:,2),'Color',[1 0.5686 0],'LineWidth',1)
     plot(motion(:,3),'Color',[1 0.5686 0],'LineWidth',1)
     ylim([-0.06 0.06]); xlim([1 length(motion)]); set(gca,'FontSize',12,'XTickLabel',[])
-    ylabel({'{\bfRotations}','[rads]'},'rotation',90)
+    if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+        ylabel({'{\bfRotations}','[rads]'},'rotation',90)
+    else
+        ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+    end
     hold off
     subplot(414)
     hold on
@@ -607,7 +641,11 @@ if moco_loc
     plot(motion(:,5),'Color',[1 0 0],'LineWidth',1.5)
     plot(motion(:,6),'Color',[1 0 0],'LineWidth',1.5)
     ylim([-6 6]); xlim([1 length(motion)])
-    ylabel({'{\bfTranslations}','[mm]'},'rotation',90)
+    if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+        ylabel({'{\bfTranslations}','[mm]'},'rotation',90)
+    else
+        ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+    end
     xlabel('{\bfTRs}'); set(gca,'FontSize',12)
     hold off
     if bySlice==1
@@ -667,6 +705,8 @@ if write_out==1
         writematrix(voxelDir,[phys_prefix order '_tstats.txt'],'Delimiter','tab')
     end
 end
-
+%% Remove added paths
+rmpath(input_folder)
+rmpath(phys_loc)
 
 fprintf('\n...done!\n')
