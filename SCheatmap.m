@@ -26,11 +26,12 @@ function [heatmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,T
 % "PlotSmoothData", 1 --------------------------> 1 or 0: 1 will plot smoothed data (default: 0)
 % "Traces", ["RVT" "HR"] -----------------------> choose physio traces to focus on
 %                        (WIP!!)                         1x2 string array (default: ["CO2" "HR"])
-% "GLMtask", ["Task" "HR"] ---------------------> identify two traces to be used as GLM regressors
-%                                                 (default: ["CO2" "HR"])
+% "GLMtask", ["Task" "HR"] ---------------------> indicate that you would like to perform a GLM and 
+%                                                 identify two traces to be used as GLM regressors
+%                                                 
 % 
 % Example using name-value pair arguments (assuming minimum arguments as ...)
-% SCheatmap(..., "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"], "PlotSmoothData", 1)
+% SCheatmap(..., "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"], "PlotSmoothData", 1, "GLMtask", ["CO2" "HR"])
 % 
 % OUTPUTS
 % heatmap ------------>  heat map matrix (spatially normalized)
@@ -60,11 +61,11 @@ arguments
     options.mocoLoc (1,1) string = "-"
     options.mocoLabel (1,6) string = ["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"]
     options.cBound (1,1) double {mustBePositive} = 0.4
-    options.PlotSmoothData (1,1) double = 0
+    options.PlotSmoothData (1,1) {mustBeMember(options.PlotSmoothData,[0,1])} = 0
     options.Traces (1,2) string {mustBeMember(options.Traces,["CO2","HR",...
         "O2","RVT"])} = ["CO2" "HR"]
     options.GLMtask (1,2) string {mustBeMember(options.GLMtask,["CO2","HR",...
-        "O2","RVT"])} = ["CO2" "HR"] % OR MAKE 1x2
+        "O2","RVT","-"])} = ["-" "-"]
 end
 close all
 addpath(input_folder)
@@ -211,21 +212,28 @@ for r=1:nRow
     heatmap(r,:)=(heatmap_preNorm(r,:)-mean_ts(r))./range(mean_ts);
 end
 %% Load physiological and motion data
-% Load convolved physiological regressors (if GLM?)
+% Load convolved physiological regressors if user chooses GLMtask
 suffix.HR='_CRFconv';
 suffix.CO2='_HRFconv';
 suffix.RVT='_RRFconv';
 suffix.O2='_HRFconv';
-physconv.(options.GLMtask(1))=load(strcat(prefix,'_',options.GLMtask(1),suffix.(options.GLMtask(1)),'.txt'));
-physconv.(options.GLMtask(2))=load(strcat(prefix,'_',options.GLMtask(2),suffix.(options.GLMtask(2)),'.txt'));
+if options.GLMtask ~= "-"
+    physconv.(options.GLMtask(1))=load(strcat(prefix,'_',options.GLMtask(1),suffix.(options.GLMtask(1)),'.txt'));
+    physconv.(options.GLMtask(2))=load(strcat(prefix,'_',options.GLMtask(2),suffix.(options.GLMtask(2)),'.txt'));
+    % Demean convolved physiological regressors
+    physconv.(options.GLMtask(1))=physconv.(options.GLMtask(1))-mean(physconv.(options.GLMtask(1)));
+    physconv.(options.GLMtask(2))=physconv.(options.GLMtask(2))-mean(physconv.(options.GLMtask(2)));
+    % Load non-convolved versions too for visualization
+    phys.(options.GLMtask(1))=load(strcat(prefix,'_',options.GLMtask(1),'.txt'));
+    phys.(options.GLMtask(2))=load(strcat(prefix,'_',options.GLMtask(2),'.txt'));
+    % Loading statement 
+    fprintf(strcat("Loading: ",prefix,'_',options.GLMtask(1),suffix.(options.GLMtask(1)),'.txt',...
+    " and ",prefix,'_',options.GLMtask(2),suffix.(options.GLMtask(2)),'.txt\n'))
+end
 % Load nonconvolved physiological traces
 phys.(options.Traces(1))=load(strcat(prefix,'_',options.Traces(1),'.txt'));
 phys.(options.Traces(2))=load(strcat(prefix,'_',options.Traces(2),'.txt'));
-phys.(options.GLMtask(1))=load(strcat(prefix,'_',options.GLMtask(1),'.txt'));
-phys.(options.GLMtask(2))=load(strcat(prefix,'_',options.GLMtask(2),'.txt'));
-% Loading statements
-fprintf(strcat("Loading: ",prefix,'_',options.GLMtask(1),suffix.(options.GLMtask(1)),'.txt',...
-    " and ",prefix,'_',options.GLMtask(2),suffix.(options.GLMtask(2)),'.txt\n'))
+% Loading statement
 fprintf(strcat("Loading: ",prefix,'_',options.Traces(1),'.txt',...
     " and ",prefix,'_',options.Traces(2),'.txt\n'))
 % Load motion and demean (if exists)
@@ -235,23 +243,24 @@ if options.mocoLoc ~= "-"
         motion(:,i)=motion(:,i)-mean(motion(:,i));
     end
     if size(motion,2) ~=6
-%         mocoLoc=[];
         warning('Motion file does not have 6 columns. Will ignore.')
     end
 else
     % Define dummy vector to pass equal length check below
     motion=zeros(size(heatmap,2),1);
 end
-% Demean convolved physiological regressors (if GLM?)
-physconv.(options.GLMtask(1))=physconv.(options.GLMtask(1))-mean(physconv.(options.GLMtask(1)));
-physconv.(options.GLMtask(2))=physconv.(options.GLMtask(2))-mean(physconv.(options.GLMtask(2)));
-
 % Define caxis bounds for heatmap (user input or default 0.4)
 c1=-options.cBound; c2=options.cBound;
 % Do more checks (equal lengths)
-if ~isequal(size(heatmap,2), length(phys.(options.Traces(1))), length(phys.(options.Traces(2))), ...
-        length(physconv.(options.GLMtask(1))), length(physconv.(options.GLMtask(2))), size(motion,1))
-    error('Length of traces does not match number of TRs (%d). Check fMRI data, physiological traces, and motion traces.', size(heatmap,2))
+if options.GLMtask ~= "-"
+    if ~isequal(size(heatmap,2), length(phys.(options.Traces(1))), length(phys.(options.Traces(2))), ...
+            length(physconv.(options.GLMtask(1))), length(physconv.(options.GLMtask(2))), size(motion,1))
+        error('Length of traces does not match number of TRs (%d). Check fMRI data, physiological traces, and motion traces.', size(heatmap,2))
+    end
+else
+    if ~isequal(size(heatmap,2), length(phys.(options.Traces(1))), length(phys.(options.Traces(2))), size(motion,1))
+        error('Length of traces does not match number of TRs (%d). Check fMRI data, physiological traces, and motion traces.', size(heatmap,2))
+    end
 end
 % Create labels for phys data                       
 % (can use this format for labels: [label.(options.Traces(1)) label.(option.Traces(2))]
@@ -314,6 +323,7 @@ if bySlice==0
     imagesc(tissueColorbar); colormap(gca,greengrayMap)
     caxis([0 max(tissueColorbar(:,1))]);
     set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
 end
 
 %% Plot data ordered by slice (and vertebral level if opted for)
@@ -367,17 +377,13 @@ if bySlice==1
         caxis([0 max(vertebralLevels(:,1))]); 
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     end
+    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice.jpg'))
 end
 
 %% PHASE / FREQUENCY / POWER
-%%%%%% Set phys data to plot: (TO DELETE)
-% phys=[physCO2 physHR];
-% size(phys)
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Fourier transform & calculations for phys data
 for ph=1:2
     fs=1/TR; % 0.5 for TR=2
-% % % % % % % % % % %     phys_FT(:,ph)=fft(phys(:,ph)); % Fourier transformed phys regressor
     phys_FT(:,ph)=fft(phys.(options.Traces(ph))); % Fourier transformed phys regressor
     n=length(phys_FT(:,ph));
     phys_power(:,ph)=abs(phys_FT(:,ph)).^2/n;                % non-zero centered power
@@ -451,7 +457,7 @@ title((options.Traces(2)))
 xlim([0 0.25])
 
 %% Run GLM
-if options.mocoLoc ~= "-"
+if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     X=[ones(size(heatmap,2),1) physconv.(options.GLMtask(1)) physconv.(options.GLMtask(2)) motion];
     % Demean the design matrix
     for i=2:size(X,2)
@@ -485,7 +491,7 @@ else
     tstats=[];
 end
 %% Motion, phys, GLM plot
-if options.mocoLoc ~= "-"
+if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     % Define colormaps
     greenMap = [zeros(256,1), linspace(0,1,256)', zeros(256,1)];
     cyanMap = [zeros(256,1), linspace(0,1,256)', linspace(0,1,256)'];
@@ -570,7 +576,7 @@ if options.mocoLoc ~= "-"
     imagesc(abs(tstats(:,6:8))); set(gca,'xtick',[],'ytick',[],'FontSize',12);  colormap(gca,translationsMap); caxis([0 5])
 end
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(1)
-if options.mocoLoc ~= "-"
+if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     % GLMtstats(1) heatmap
     temp_sorter=[abs(tstats(:,1)) heatmap];
     heatmap_1_sort=sortrows(temp_sorter,1,'descend');
@@ -602,7 +608,7 @@ if options.mocoLoc ~= "-"
 end
 
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(2)
-if options.mocoLoc ~= "-"
+if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     % HR heatmap
     temp_sorter=[abs(tstats(:,2)) heatmap];
     heatmap_2_sort=sortrows(temp_sorter,1,'descend');
@@ -635,7 +641,7 @@ if options.mocoLoc ~= "-"
 end
  
 %% Condensed motion regressor plot
-if options.mocoLoc ~= "-"
+if (options.mocoLoc ~= "-")
     figure('Name','Translations and Rotations','Renderer', 'painters', 'Position', [50 1000 683 700])
     subplot(4,1,[1,2])
     imagesc(heatmap)
@@ -716,19 +722,20 @@ elseif bySlice==0
     caxis([0 max(tissueColorbar(:,1))]);
     set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
 end
-%% Write out files if requested
+%% Write out files if requested saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
 if write_out==1
     if bySlice==1
         order='bySlice';
     elseif bySlice==0
         order='byTissue';
     end
-    writematrix(heatmap,[prefix order '_heatmap.txt'],'Delimiter','tab')
-    writematrix(voxelDir,[prefix order 'voxelDirectory.txt'],'Delimiter','tab')
+    writematrix(heatmap,[input_folder '/' prefix order '_heatmap.txt'],'Delimiter','tab')
+    writematrix(voxelDir,[input_folder '/' prefix order 'voxelDirectory.txt'],'Delimiter','tab')
     if tstats
-        writematrix(voxelDir,[prefix order '_tstats.txt'],'Delimiter','tab')
+        writematrix(voxelDir,[input_folder '/' prefix order '_tstats.txt'],'Delimiter','tab')
     end
 end
+fprintf(['\nFile(s) saved to: ' input_folder '\n'])
 %% Remove added paths
 rmpath(input_folder)
 rmpath(phys_loc)
