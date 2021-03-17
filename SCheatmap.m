@@ -1,4 +1,4 @@
-function [heatmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,options)
+function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,options)
 % SCheatmap DESCRIPTION
 % Use masks created by the x.carpetPlots and produce the carpet plot
 % figures in time and frequency domains, plotted with regressors, and
@@ -20,15 +20,18 @@ function [heatmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,T
 %
 % OPTIONAL NAME-VALUE PAIR ARGUMENTS
 % "mocoLoc", "/path/file.txt" ------------------> OPTIONAL: full path to 6DOF motion traces file
-%                                                 (default: ["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+%                                                 
 % "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"] -> order of columns
+                    
 % "cBound", 0.3 --------------------------------> caxis abs value of limit around zero (default: 0.4)
 % "PlotSmoothData", 1 --------------------------> 1 or 0: 1 will plot smoothed data (default: 0)
 % "Traces", ["RVT" "HR"] -----------------------> choose physio traces to focus on
-%                        (WIP!!)                         1x2 string array (default: ["CO2" "HR"])
+%                                                 1x2 string array (default: ["CO2" "HR"])
 % "GLMtask", ["Task" "HR"] ---------------------> indicate that you would like to perform a GLM and 
 %                                                 identify two traces to be used as GLM regressors
-%                                                 
+% "basic", 1 -----------------------------------> output only basic plot without traces (default: 0)
+% "Demean", 1 ------------WIP----------------------> Show demeaned traces with plots (default: 0)
+%                    sf?????                             
 % 
 % Example using name-value pair arguments (assuming minimum arguments as ...)
 % SCheatmap(..., "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"], "PlotSmoothData", 1, "GLMtask", ["CO2" "HR"])
@@ -66,6 +69,7 @@ arguments
         "O2","RVT"])} = ["CO2" "HR"]
     options.GLMtask (1,2) string {mustBeMember(options.GLMtask,["CO2","HR",...
         "O2","RVT","-"])} = ["-" "-"]
+    options.basic (1,1) {mustBeMember(options.basic,[0,1])} = 0
 end
 close all
 addpath(input_folder)
@@ -75,7 +79,7 @@ fprintf('\nBeginning... \n \n')
 if options.PlotSmoothData==0
     maskdir=dir([input_folder '/mask*ts.txt']);
 elseif options.PlotSmoothData==1
-    fprintf('/nUsing data smoothed within masks.\n')
+    fprintf('\nUsing data smoothed within masks.\n')
     maskdir=dir([input_folder '/blur_mask*ts.txt']);
 else
     error('PlotSmoothData input argument not binary.')
@@ -97,7 +101,7 @@ for i=1:size(maskdir,1)
         maskts{i}(:,nan_col(1))=[];
     end
 end
-fprintf('NaN column deleted \n \n')
+fprintf('\nNaN column deleted \n \n')
 %% Delete first and last slice
 firstSlice=min(maskts{1}(3,:));
 lastSlice=max(maskts{1}(3,:));
@@ -211,6 +215,92 @@ heatmap=zeros(size(heatmap_preNorm));
 for r=1:nRow
     heatmap(r,:)=(heatmap_preNorm(r,:)-mean_ts(r))./range(mean_ts);
 end
+%% Define colormaps
+% Tissue colormap:
+% Semi-manually define FSL's greengray colormap (using polynomials)
+x=1:256; p1 = -7.3246e-20; p2 = 7.6618e-17; p3 = -3.2357e-14; p4 = 7.0892e-12; p5 = -8.6807e-10;
+p6 = 5.9635e-08; p7 = -1.9699e-06; p8 = 1.1824e-05; p9 = 0.0010542; p10 = -0.0020195;
+d1 = p1.*x.^9 + p2.*x.^8 + p3.*x.^7 + p4.*x.^6 + p5.*x.^5 + p6.*x.^4 + p7.*x.^3 + p8.*x.^2 + p9.*x + p10 ;
+d1(1)=0; d1(256)=1;
+p1 = -4.1809e-14; p2 = 3.5582e-11; p3 = -1.1274e-08; p4 = 1.6419e-06;
+p5 = -0.00011092; p6 = 0.0069924; p7 = -0.0011795;
+d2 = p1.*x.^6 + p2.*x.^5 + p3.*x.^4 + p4.*x.^3 + p5.*x.^2 + p6.*x + p7 ;
+p1 = -4.3403e-20; p2 = 4.5503e-17; p3 = -1.9218e-14; p4 = 4.2255e-12; p5 = -5.3269e-10;
+p6 = 4.1003e-08; p7 = -1.8802e-06; p8 = 4.8024e-05; p9 = -0.00010991; p10 = 0.0027377;
+d3 = p1.*x.^9 + p2.*x.^8 + p3.*x.^7 + p4.*x.^6 + p5.*x.^5 + p6.*x.^4 + p7.*x.^3 + p8.*x.^2 + p9.*x + p10 ;
+d3(256)=1;
+greengrayMap=[d1' d2' d3'];
+%     Load FSL's colormap:
+%     greengrayMap=load('/usr/local/fsl/fslpython/envs/fslpython/lib/python3.7/...site-packages/fsleyes/assets/colourmaps/brain_colours/greengray.cmap');
+% Slice colormap:
+blueLightBlueMap = [zeros(256,1), linspace(0,1,256)', ones(256,1)]; % from FSL
+%% Define caxis bounds for heatmap (user input or default 0.4)
+c1=-options.cBound; c2=options.cBound;
+%% Plot basic plot then exit function
+if (options.basic==1) && (bySlice==0)
+    figure('Name','Basic Plot: By Tissue','Renderer', 'painters', 'Position', [50 1000 887 538])
+    imagesc(heatmap)
+    set(gca,'YTickLabel',[]); pbaspect([2 1 1])
+    gca
+    xlabel('{\bfTRs}')
+    colormap gray
+    caxis([c1 c2])
+    tissueTypes=ones(size(maskts,2),3);
+    tissueTypes(:,1)=size(maskts,2):-1:1;
+    idx=1;
+    gmEnds=size(maskts{size(maskts,2)},2);
+    tissueTypes(idx,3)=gmEnds;
+    for t=size(maskts,2)-1:-1:1
+        idx=idx+1;
+        tissueTypes(idx,3)=size(maskts{t},2)+tissueTypes(idx-1,3);
+    end
+    tissueTypes(2:end,2)=tissueTypes(1:end-1,3)+1;
+    tissueColorbar=zeros(size(heatmap,1),1);
+    for t=1:size(tissueTypes,1)
+        tissueColorbar(tissueTypes(t,2):tissueTypes(t,3))=tissueTypes(t,1);
+    end
+    % Plot tissue next to heatmap [x0 y0 width height]
+    subplot('Position',[0.11 0.197 0.019 0.64])
+    imagesc(tissueColorbar); colormap(gca,greengrayMap)
+    caxis([0 max(tissueColorbar(:,1))]);
+    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[]) 
+    fprintf('\nPlotted basic plot... done!\n')
+    return
+elseif (options.basic==1) && (bySlice==1)
+    figure('Name','By Slice','Renderer', 'painters', 'Position', [50 1000 887 538])
+    imagesc(heatmap)
+    set(gca,'YTickLabel',[]); pbaspect([2 1 1])
+    xlabel('{\bfTRs}'); set(gca,'FontSize',12)
+    colormap gray
+    caxis([c1 c2])
+    if useLevels==1
+        levChange=(min(voxelDir(:,4)):max(voxelDir(:,4))-1); l=1;
+        levChange=[levChange' zeros(1,range(voxelDir(:,4)))'];
+        for i=2:length(voxelDir)
+            if voxelDir(i-1,4)~=voxelDir(i,4)
+                levChange(l,2)=i;
+                l=l+1;
+            end
+        end
+        % Create a colorbar of the vertebral levels and add to figure
+        vertebralLevels=ones(size(levChange,1)+1,3);
+        vertebralLevels(1:end,1)=[levChange(:,1); levChange(end,1)+1];
+        vertebralLevels(1:end,3)=[levChange(:,2); size(heatmap,1)];
+        vertebralLevels(2:end,2)=vertebralLevels(1:end-1,3)+1;
+        vertebralColorbar=zeros(size(heatmap,1),1);
+        for v=1:size(vertebralLevels,1)
+        vertebralColorbar(vertebralLevels(v,2):vertebralLevels(v,3))=vertebralLevels(v,1);
+        end
+        % Plot vertebral level next to heatmap
+        subplot('Position',[0.11 0.197 0.019 0.64])
+        imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
+        caxis([0 max(vertebralLevels(:,1))]); 
+        set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+    end
+    
+    fprintf('\nPlotted basic plot... done!\n')
+    return
+end
 %% Load physiological and motion data
 % Load convolved physiological regressors if user chooses GLMtask
 suffix.HR='_CRFconv';
@@ -227,15 +317,15 @@ if options.GLMtask ~= "-"
     phys.(options.GLMtask(1))=load(strcat(prefix,'_',options.GLMtask(1),'.txt'));
     phys.(options.GLMtask(2))=load(strcat(prefix,'_',options.GLMtask(2),'.txt'));
     % Loading statement 
-    fprintf(strcat("Loading: ",prefix,'_',options.GLMtask(1),suffix.(options.GLMtask(1)),'.txt',...
-    " and ",prefix,'_',options.GLMtask(2),suffix.(options.GLMtask(2)),'.txt\n'))
+    fprintf(strcat("Loading: ",prefix,"_",options.GLMtask(1),suffix.(options.GLMtask(1)),".txt",...
+    " and ",prefix,"_",options.GLMtask(2),suffix.(options.GLMtask(2)),".txt\n"))
 end
 % Load nonconvolved physiological traces
 phys.(options.Traces(1))=load(strcat(prefix,'_',options.Traces(1),'.txt'));
 phys.(options.Traces(2))=load(strcat(prefix,'_',options.Traces(2),'.txt'));
 % Loading statement
-fprintf(strcat("Loading: ",prefix,'_',options.Traces(1),'.txt',...
-    " and ",prefix,'_',options.Traces(2),'.txt\n'))
+fprintf(strcat("Loading: ",prefix,"_",options.Traces(1),".txt",...
+    " and ",prefix,'_',options.Traces(2),".txt\n"))
 % Load motion and demean (if exists)
 if options.mocoLoc ~= "-"
     motion=load(options.mocoLoc);
@@ -249,8 +339,6 @@ else
     % Define dummy vector to pass equal length check below
     motion=zeros(size(heatmap,2),1);
 end
-% Define caxis bounds for heatmap (user input or default 0.4)
-c1=-options.cBound; c2=options.cBound;
 % Do more checks (equal lengths)
 if options.GLMtask ~= "-"
     if ~isequal(size(heatmap,2), length(phys.(options.Traces(1))), length(phys.(options.Traces(2))), ...
@@ -280,7 +368,7 @@ if bySlice==0
     colormap gray
     caxis([c1 c2])
     % Draw white line b/t tissue types
-    line([0 nRow], [gmEnds+0.5 gmEnds+0.5],'Color','white','LineWidth',0.7) 
+%     line([0 nRow], [gmEnds+0.5 gmEnds+0.5],'Color','white','LineWidth',0.7) 
     % Add physio
     subplot(411)
     plot(phys.(options.Traces(1)),'c','LineWidth',1.5); xlim([0 length(phys.(options.Traces(1)))])
@@ -290,21 +378,6 @@ if bySlice==0
     plot(phys.(options.Traces(2)),'g','LineWidth',1.5); xlim([0 length(phys.(options.Traces(1)))])
     ylabel(label.(options.Traces(2)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
     set(gca,'XTickLabel',[],'FontSize',12)
-    % Semi-manually define FSL's greengray colormap (using polynomials)
-    x=1:256; p1 = -7.3246e-20; p2 = 7.6618e-17; p3 = -3.2357e-14; p4 = 7.0892e-12; p5 = -8.6807e-10;
-    p6 = 5.9635e-08; p7 = -1.9699e-06; p8 = 1.1824e-05; p9 = 0.0010542; p10 = -0.0020195;
-    d1 = p1.*x.^9 + p2.*x.^8 + p3.*x.^7 + p4.*x.^6 + p5.*x.^5 + p6.*x.^4 + p7.*x.^3 + p8.*x.^2 + p9.*x + p10 ;
-    d1(1)=0; d1(256)=1;
-    p1 = -4.1809e-14; p2 = 3.5582e-11; p3 = -1.1274e-08; p4 = 1.6419e-06;
-    p5 = -0.00011092; p6 = 0.0069924; p7 = -0.0011795;
-    d2 = p1.*x.^6 + p2.*x.^5 + p3.*x.^4 + p4.*x.^3 + p5.*x.^2 + p6.*x + p7 ;
-    p1 = -4.3403e-20; p2 = 4.5503e-17; p3 = -1.9218e-14; p4 = 4.2255e-12; p5 = -5.3269e-10;
-    p6 = 4.1003e-08; p7 = -1.8802e-06; p8 = 4.8024e-05; p9 = -0.00010991; p10 = 0.0027377;
-    d3 = p1.*x.^9 + p2.*x.^8 + p3.*x.^7 + p4.*x.^6 + p5.*x.^5 + p6.*x.^4 + p7.*x.^3 + p8.*x.^2 + p9.*x + p10 ;
-    d3(256)=1;
-    greengrayMap=[d1' d2' d3'];
-%     Load FSL's colormap:
-%     greengrayMap=load('/usr/local/fsl/fslpython/envs/fslpython/lib/python3.7/...site-packages/fsleyes/assets/colourmaps/brain_colours/greengray.cmap');
     tissueTypes=ones(size(maskts,2),3);
     tissueTypes(:,1)=size(maskts,2):-1:1;
     idx=1;
@@ -323,7 +396,8 @@ if bySlice==0
     imagesc(tissueColorbar); colormap(gca,greengrayMap)
     caxis([0 max(tissueColorbar(:,1))]);
     set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
-    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
+%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
+    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue_blur',options.PlotSmoothData,'.jpg')) % This is causing the input warning
 end
 
 %% Plot data ordered by slice (and vertebral level if opted for)
@@ -346,6 +420,7 @@ if bySlice==1
     ylabel(label.(options.Traces(2)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
     set(gca,'XTickLabel',[],'FontSize',12)
     if useLevels==1
+%         size(voxelDir)
         % Add small indicators of where the vertebral levels are
         levChange=(min(voxelDir(:,4)):max(voxelDir(:,4))-1); l=1;
         levChange=[levChange' zeros(1,range(voxelDir(:,4)))'];
@@ -366,7 +441,6 @@ if bySlice==1
         vertebralLevels(1:end,1)=[levChange(:,1); levChange(end,1)+1];
         vertebralLevels(1:end,3)=[levChange(:,2); size(heatmap,1)];
         vertebralLevels(2:end,2)=vertebralLevels(1:end-1,3)+1;
-        blueLightBlueMap = [zeros(256,1), linspace(0,1,256)', ones(256,1)]; % from FSL
         vertebralColorbar=zeros(size(heatmap,1),1);
         for v=1:size(vertebralLevels,1)
             vertebralColorbar(vertebralLevels(v,2):vertebralLevels(v,3))=vertebralLevels(v,1);
@@ -377,7 +451,8 @@ if bySlice==1
         caxis([0 max(vertebralLevels(:,1))]); 
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     end
-    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice.jpg'))
+%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice.jpg'))
+    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice_blur',string(options.PlotSmoothData),'.jpg'))
 end
 
 %% PHASE / FREQUENCY / POWER
@@ -411,7 +486,13 @@ powerPlot(:,1)=0; phys_power(1,:)=0;
 figure('Name','Power','Renderer', 'painters', 'Position', [50 1000 630 700])
 subplot(4,1,[3,4])
 imagesc(powerPlot(:,1:round(n/2))); set(gca,'xtick',[]); colormap pink
-caxis([0 0.8]); 
+freqmap=powerPlot(:,1:round(n/2)); % For function output
+% %%%%
+% size(powerPlot) 205 long
+% size(phys_power) 205 long
+% freq is 0 to .5 and is 205 long (#TRs)
+% %%%%
+caxis([0 0.25]); 
 set(gca,'YTickLabel',[]); pbaspect([2 1 1])
 % % if bySlice==1
 % %     ylabel('\leftarrow Inferior                 Superior \rightarrow')
@@ -455,6 +536,7 @@ subplot(412)
 plot(freq,phys_power(:,2),'g','LineWidth',1.5)
 title((options.Traces(2)))
 xlim([0 0.25])
+
 
 %% Run GLM
 if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
@@ -696,6 +778,7 @@ if (options.mocoLoc ~= "-")
         caxis([0 max(tissueColorbar(:,1))]);
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     end
+    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_motion_blur',options.PlotSmoothData,'.jpg'))
 end
 
 %% DVARS plotting (and FD?)
