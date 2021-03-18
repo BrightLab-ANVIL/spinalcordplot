@@ -12,13 +12,14 @@ to the tissue types. The timeseries for each voxel in each mask are outputted. T
 data can be used to create heatmaps in SCheatmap.m. Additional outputs of \
 interest are all erosions and masks created, the log file maskDescriptions.txt, \
 and vertebralLevels.txt. The vertebral levels can be used in the plot script to \
-indicate where these breaks occur.
+indicate the levels.
 
 USAGE
-  zsh x.heatmapPrep -i ~/data/derivatives/sub-01/ses-Pilot/func -o heatmap_output
+  zsh x.heatmapPrep -i ~/data/sub-01/label -f ~/data/sub-01/func.nii.gz -o heatmap_output
 
 MANDATORY ARGUMENTS
-  -i <input folder>       full path to func folder (with PAM50 data from running registration)
+  -i <input folder>       full path to label folder (with PAM50 data from running SCT registration)
+  -f <functional data>    full path to functiona data file (same file used for SCT registration)
   -o <output folder>      desired name of output folder
 
 EOF
@@ -32,7 +33,7 @@ fi
 scriptname=${0}
 data_path=
 outputdir=
-while getopts ':hi:o:' OPTION; do
+while getopts ':hi:f:o:' OPTION; do
   case $OPTION in
     h)
           usage
@@ -40,6 +41,9 @@ while getopts ':hi:o:' OPTION; do
           ;;
     i)
           data_path=$OPTARG
+          ;;
+    f)
+          func=$OPTARG
           ;;
     o)
           output_folder=$OPTARG
@@ -56,6 +60,10 @@ if [[ -z ${data_path} ]]; then
 	 echo "ERROR: Input functional data path not specified. Exiting!\n"
      exit 1
 fi
+if [[ -z ${func} ]]; then
+	 echo "ERROR: Functional data file not specified. Exiting!\n"
+     exit 1
+fi
 if [[ -z ${output_folder} ]]; then
 	 echo "ERROR: Output folder not specified. Exiting!\n"
      exit 1
@@ -68,11 +76,12 @@ echo '\nCreated new output directory called: ' ${output_folder} '\n'
 cd ../${output_folder}
 outputdir=`pwd`
 cd ${data_path}
-# Inputs are data in functional space. The functional folder should be that made by
-# the x.PreProc_Registration.sh script. This script assumes those file name conventions.
-func=func.nii.gz # functional data (RETROICOR'd and MC'd)
-input=label/template/PAM50_cord.nii.gz # cord mask
-levels=label/template/PAM50_levels.nii.gz # vertebral levels (NOT CORD)
+# All inputs are data in functional space
+# Calculate functional mean image for visualizations later
+fslmaths ${func} -Tmean func_mean.nii.gz
+# The data_path should be the "label" folder containing these PAM50 files
+input=template/PAM50_cord.nii.gz # cord mask
+levels=template/PAM50_levels.nii.gz # vertebral levels (NOT CORD)
 # Do checks then initialize mask descriptions log file
 if [[ -f "${outputdir}/maskDescriptions.txt" ]]; then
     echo -n "Looks like you've already done this analysis, continuing will cause files to be overwritten. Would you like to continue? \e[42mEnter y or n:\e[0m "
@@ -95,9 +104,9 @@ fslmaths ${levels} -thr 0.5 -bin ${outputdir}/tempLevelsToOne.nii.gz
 fslmeants -i ${levels} -m ${outputdir}/tempLevelsToOne.nii.gz --showall > ${outputdir}/vertebralLevels.txt
 rm ${outputdir}/tempLevelsToOne.nii.gz
 # Need to binarize these tissue specific (probabilistic) masks
-fslmaths label/template/PAM50_csf.nii.gz -thr 0.5 -bin ${outputdir}/full_csf_mask.nii.gz
-fslmaths label/template/PAM50_gm.nii.gz -thr 0.5 -bin ${outputdir}/full_gm_mask.nii.gz
-fslmaths label/template/PAM50_wm.nii.gz -thr 0.5 -bin ${outputdir}/full_wm_mask.nii.gz
+fslmaths template/PAM50_csf.nii.gz -thr 0.5 -bin ${outputdir}/full_csf_mask.nii.gz
+fslmaths template/PAM50_gm.nii.gz -thr 0.5 -bin ${outputdir}/full_gm_mask.nii.gz
+fslmaths template/PAM50_wm.nii.gz -thr 0.5 -bin ${outputdir}/full_wm_mask.nii.gz
 csf=${outputdir}/full_csf_mask.nii.gz
 gm=${outputdir}/full_gm_mask.nii.gz
 wm=${outputdir}/full_wm_mask.nii.gz
@@ -212,7 +221,7 @@ mv ${outputdir}/tempTemp.txt ${outputdir}/maskDescriptions.txt
 m=0
 for mask in ${outputdir}/mask*.nii.gz
 do
-	echo "Processing mask $mask"
+	echo "Processing mask $m"
   fslmeants -i ${func} -m ${mask} --showall > ${outputdir}/mask${m}ts.txt
   m=$(( m+1 ))
 done
@@ -242,10 +251,52 @@ do
 done
 fsleyes func_mean.nii.gz ${outputdir}/allMaskVisualization.nii.gz -cm brain_colours_greengray &
 ###############################################################################
-# Calculate DVARS trace (for visualization alongside heat map)
-3dTto1D -input ${func} -mask func_mean_mask.nii.gz -method dvars -prefix ${outputdir}/dvars.txt
+# Vertebral levels mask visualization
+fsleyes func_mean.nii.gz ${levels} -cm blue-lightblue &
 ###############################################################################
+# Calculate DVARS trace using PAM50_cord as the mask
+3dTto1D -input ${func} -mask ${input} -method dvars -prefix ${outputdir}/dvars.txt
+###############################################################################
+# Extract 8 largest tracts by volume, binarize then extract ts (WIP)
+# Binarize masks
+mkdir ${outputdir}/tracts
+fslmaths atlas/PAM50_atlas_04.nii.gz -thr 0.5 -bin ${outputdir}/tracts/LLC_mask.nii.gz # Left lateral corticospinal
+fslmaths atlas/PAM50_atlas_05.nii.gz -thr 0.5 -bin ${outputdir}/tracts/RLC_mask.nii.gz # Right lateral corticospinal
+fslmaths atlas/PAM50_atlas_22.nii.gz -thr 0.5 -bin ${outputdir}/tracts/LVC_mask.nii.gz # Left ventral corticospinal
+fslmaths atlas/PAM50_atlas_23.nii.gz -thr 0.5 -bin ${outputdir}/tracts/RVC_mask.nii.gz # Right ventral corticospinal
+fslmaths atlas/PAM50_atlas_02.nii.gz -thr 0.5 -bin ${outputdir}/tracts/LFC_mask.nii.gz # Left fasciculus cuneatus
+fslmaths atlas/PAM50_atlas_03.nii.gz -thr 0.5 -bin ${outputdir}/tracts/RFC_mask.nii.gz # Right fasciculus cuneatus
+fslmaths atlas/PAM50_atlas_00.nii.gz -thr 0.5 -bin ${outputdir}/tracts/LFG_mask.nii.gz # Left fasciculus gracilis
+fslmaths atlas/PAM50_atlas_01.nii.gz -thr 0.5 -bin ${outputdir}/tracts/RFG_mask.nii.gz # Right fasciculus gracilis
+# Extract timeseries
+fslmeants -i ${func} -m ${outputdir}/tracts/LLC_mask.nii.gz --showall > ${outputdir}/tracts/LLCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/RLC_mask.nii.gz --showall > ${outputdir}/tracts/RLCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/LVC_mask.nii.gz --showall > ${outputdir}/tracts/LVCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/RVC_mask.nii.gz --showall > ${outputdir}/tracts/RVCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/LFC_mask.nii.gz --showall > ${outputdir}/tracts/LFCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/RFC_mask.nii.gz --showall > ${outputdir}/tracts/RFCts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/LFG_mask.nii.gz --showall > ${outputdir}/tracts/LFGts.txt
+fslmeants -i ${func} -m ${outputdir}/tracts/RFG_mask.nii.gz --showall > ${outputdir}/tracts/RFGts.txt
+###############################################################################
+# # # Smoothing (WIP)
+echo "\nDelete top and bottom slice in mask (for smoothing).\nOverwrite file when saving (PAM50_cord_forSmoothing.nii.gz).\n"
+cp ${input} template/PAM50_cord_forSmoothing.nii.gz
+blurMask=template/PAM50_cord_forSmoothing.nii.gz
+fsleyes ${blurMask}
+#### ^ Find a way to automate this after OHBM abstract (maybe fslroi?)
+echo "\nBlurring func data in mask...\n"
+# Blur in cord mask
+3dblurinmask -input ${func} -FWHM 2.9 -Mmask  ${blurMask} \
+-prefix ${outputdir}/func_blur_cord.nii.gz -preserve -quiet
 
+# Calculate blurred timeseries for each mask:
+m=0
+for mask in ${outputdir}/mask*.nii.gz
+do
+	echo "Processing mask $m in func_blur_cord.nii.gz"
+  fslmeants -i ${outputdir}/func_blur_cord.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
+  m=$(( m+1 ))
+done
 ###############################################################################
 echo ""
 echo -e "\e[1;35m... done! Runtime: $SECONDS seconds.\e[0m"
