@@ -278,16 +278,23 @@ fslmeants -i ${func} -m ${outputdir}/tracts/RFC_mask.nii.gz --showall > ${output
 fslmeants -i ${func} -m ${outputdir}/tracts/LFG_mask.nii.gz --showall > ${outputdir}/tracts/LFGts.txt
 fslmeants -i ${func} -m ${outputdir}/tracts/RFG_mask.nii.gz --showall > ${outputdir}/tracts/RFGts.txt
 ###############################################################################
-# Smoothing (WIP)
-echo "\nBlurring func data in masks\n"
-3dblurinmask -input ${func} -FWHM 2 -Mmask ${outputdir}/allMaskVisualization.nii.gz \
--prefix ${outputdir}/func_blur_inMask.nii.gz -preserve -quiet
+# # # Smoothing (WIP)
+echo "\nDelete top and bottom slice in mask (for smoothing).\nOverwrite file when saving (PAM50_cord_forSmoothing.nii.gz).\n"
+cp ${input} template/PAM50_cord_forSmoothing.nii.gz
+blurMask=template/PAM50_cord_forSmoothing.nii.gz
+fsleyes ${blurMask}
+#### ^ Find a way to automate this after OHBM abstract (maybe fslroi?)
+echo "\nBlurring func data in mask...\n"
+# Blur in cord mask
+3dblurinmask -input ${func} -FWHM 2.9 -Mmask  ${blurMask} \
+-prefix ${outputdir}/func_blur_cord.nii.gz -preserve -quiet
+
 # Calculate blurred timeseries for each mask:
 m=0
 for mask in ${outputdir}/mask*.nii.gz
 do
-	echo "Processing mask $m in func_blur_inMask.nii.gz"
-  fslmeants -i ${outputdir}/func_blur_inMask.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
+	echo "Processing mask $m in func_blur_cord.nii.gz"
+  fslmeants -i ${outputdir}/func_blur_cord.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
   m=$(( m+1 ))
 done
 ###############################################################################

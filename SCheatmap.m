@@ -29,7 +29,7 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 %                                                 1x2 string array (default: ["CO2" "HR"])
 % "GLMtask", ["Task" "HR"] ---------------------> indicate that you would like to perform a GLM and 
 %                                                 identify two traces to be used as GLM regressors
-% "basic", 1 -----------------------------------> output only basic plot without traces (default: 0)
+% "basic", 1 -----------------------------------> ONLY output basic plot without traces (default: 0)
 % "Demean", 1 ------------WIP----------------------> Show demeaned traces with plots (default: 0)
 %                    sf?????                             
 % 
@@ -264,10 +264,11 @@ if (options.basic==1) && (bySlice==0)
     imagesc(tissueColorbar); colormap(gca,greengrayMap)
     caxis([0 max(tissueColorbar(:,1))]);
     set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[]) 
+    freqmap=0;
     fprintf('\nPlotted basic plot... done!\n')
     return
 elseif (options.basic==1) && (bySlice==1)
-    figure('Name','By Slice','Renderer', 'painters', 'Position', [50 1000 887 538])
+    figure('Name','Basic Plot: By Slice','Renderer', 'painters', 'Position', [50 1000 887 538])
     imagesc(heatmap)
     set(gca,'YTickLabel',[]); pbaspect([2 1 1])
     xlabel('{\bfTRs}'); set(gca,'FontSize',12)
@@ -296,6 +297,7 @@ elseif (options.basic==1) && (bySlice==1)
         imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
         caxis([0 max(vertebralLevels(:,1))]); 
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+        freqmap=0;
     end
     
     fprintf('\nPlotted basic plot... done!\n')
@@ -434,7 +436,7 @@ if bySlice==1
         % the new vertebral level
         subplot(4,1,[3,4])
         for level=levChange(:,2)
-            line([nCol-10 nCol], [level-0.5 level-0.5], 'Color','y','LineWidth',1)
+%             line([nCol-10 nCol], [level-0.5 level-0.5], 'Color','y','LineWidth',1)
         end
         % Create a colorbar of the vertebral levels and add to figure
         vertebralLevels=ones(size(levChange,1)+1,3);
@@ -466,7 +468,7 @@ for ph=1:2
 end
 freq = (0:n-1)*(fs/n);      % non-zero centered frequency range
 fshift=(-n/2:n/2-1)*(fs/n); % zero-centered frequency range
-
+nyquist=fs/2;
 % Fourier transform & calculations for fMRI timeseries
 heatmap_FT=zeros(size(heatmap));
 powerPlot=zeros(size(heatmap));
@@ -515,10 +517,12 @@ if bySlice==1
             line([nCol/2-5 nCol/2], [level-0.5 level-0.5], 'Color','white')
         end
     end
-    % Plot vertebral level next to heatmap
-    subplot('Position',[0.11 0.125 0.019 0.348])
-    imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
-    caxis([0 max(vertebralLevels(:,1))]); 
+    if useLevels==1
+        % Plot vertebral level next to heatmap
+        subplot('Position',[0.11 0.125 0.019 0.348])
+        imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
+        caxis([0 max(vertebralLevels(:,1))]); 
+    end
     set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
 elseif bySlice==0
     % Plot tissue next to heatmap [x0 y0 width height]
@@ -531,12 +535,11 @@ end
 subplot(411)
 plot(freq,phys_power(:,1),'c','LineWidth',1.5)
 title((options.Traces(1)))
-xlim([0 0.25]) % limit plot by Nyquist frequency
+xlim([0 nyquist]) % limit plot by Nyquist frequency
 subplot(412)
 plot(freq,phys_power(:,2),'g','LineWidth',1.5)
 title((options.Traces(2)))
-xlim([0 0.25])
-
+xlim([0 nyquist])
 
 %% Run GLM
 if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
@@ -760,7 +763,7 @@ if (options.mocoLoc ~= "-")
     end
     xlabel('{\bfTRs}'); set(gca,'FontSize',12)
     hold off
-    if bySlice==1
+    if (bySlice==1) && (useLevels==1)
         % Plot vertebral level next to heatmap
         subplot('Position',[0.111 0.5482 0.019 0.3768])
         imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
@@ -768,7 +771,7 @@ if (options.mocoLoc ~= "-")
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     elseif bySlice==0
         if useLevels==1
-            % Draw line b/t tissue types
+            % Draw line b/t tissue types ---- why is this here I'm confused
             subplot(4,1,[1,2])
             line([0 nRow], [gmEnds+0.5 gmEnds+0.5],'Color','white','LineWidth',0.7) 
         end
@@ -792,7 +795,7 @@ subplot(3,1,[2,3])
 imagesc(heatmap)
 set(gca,'YTickLabel',[]); pbaspect([2 1 1])
 xlabel('{\bfTRs}'); caxis([c1 c2]); colormap gray
-if bySlice==1
+if (bySlice==1) && (useLevels==1)
     % Plot vertebral level next to heatmap
     subplot('Position',[0.11 0.124 0.019 0.488])
     imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
