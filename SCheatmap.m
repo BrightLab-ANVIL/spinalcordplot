@@ -20,6 +20,7 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 %
 % OPTIONAL NAME-VALUE PAIR ARGUMENTS
 % "mocoLoc", "/path/file.txt" ------------------> OPTIONAL: full path to 6DOF motion traces file
+%                                                           (or 2DOF: X & Y)
 %                                                 
 % "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"] -> order of columns
                     
@@ -30,7 +31,7 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 % "GLMtask", ["Task" "HR"] ---------------------> indicate that you would like to perform a GLM and 
 %                                                 identify two traces to be used as GLM regressors
 % "basic", 1 -----------------------------------> ONLY output basic plot without traces (default: 0)
-% "Demean", 1 ------------WIP----------------------> Show demeaned traces with plots (default: 0)
+% "demean", 1 ------------WIP----------------------> Show demeaned traces with plots (default: 0)
 %                    sf?????                             
 % 
 % Example using name-value pair arguments (assuming minimum arguments as ...)
@@ -70,6 +71,7 @@ arguments
     options.GLMtask (1,2) string {mustBeMember(options.GLMtask,["CO2","HR",...
         "O2","RVT","-"])} = ["-" "-"]
     options.basic (1,1) {mustBeMember(options.basic,[0,1])} = 0
+    options.demean (1,1) {mustBeMember(options.demean,[0,1])} = 0
 end
 close all
 addpath(input_folder)
@@ -241,7 +243,6 @@ if (options.basic==1) && (bySlice==0)
     figure('Name','Basic Plot: By Tissue','Renderer', 'painters', 'Position', [50 1000 887 538])
     imagesc(heatmap)
     set(gca,'YTickLabel',[]); pbaspect([2 1 1])
-    gca
     xlabel('{\bfTRs}')
     colormap gray
     caxis([c1 c2])
@@ -334,8 +335,8 @@ if options.mocoLoc ~= "-"
     for i=1:size(motion,2)
         motion(:,i)=motion(:,i)-mean(motion(:,i));
     end
-    if size(motion,2) ~=6
-        warning('Motion file does not have 6 columns. Will ignore.')
+    if (size(motion,2) ~=6) && (size(motion,2) ~=2)
+        warning('Motion file should have 2 (X and Y) or 6 (6DOF motion) columns. Will ignore.')
     end
 else
     % Define dummy vector to pass equal length check below
@@ -542,7 +543,7 @@ title((options.Traces(2)))
 xlim([0 nyquist])
 
 %% Run GLM
-if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
+if (size(motion,2)==6) && (all(options.GLMtask ~= "-"))
     X=[ones(size(heatmap,2),1) physconv.(options.GLMtask(1)) physconv.(options.GLMtask(2)) motion];
     % Demean the design matrix
     for i=2:size(X,2)
@@ -724,45 +725,55 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     subplot('Position',[0.5099 0.1100 0.0419 0.3768]) % HR
     imagesc(abs(tstats_2_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
 end
- 
-%% Condensed motion regressor plot
+
+%% Motion trace plot
 if (options.mocoLoc ~= "-")
-    figure('Name','Translations and Rotations','Renderer', 'painters', 'Position', [50 1000 683 700])
+    figure('Name','Motion','Renderer', 'painters', 'Position', [50 1000 683 700])
     subplot(4,1,[1,2])
     imagesc(heatmap)
-%     if bySlice==1
-%         ylabel('\leftarrow Inferior                    Superior \rightarrow')
-%     elseif bySlice==0
-%         
-%         ylabel('\leftarrow Outer/WM                           Inner/GM \rightarrow')
-%     end
     set(gca,'YTickLabel',[],'XTickLabel',[]); pbaspect([2 1 1])
     caxis([c1 c2]); colormap gray
-    subplot(413)
-    hold on
-    plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
-    plot(motion(:,2),'Color',[1 0.5686 0],'LineWidth',1)
-    plot(motion(:,3),'Color',[1 0.5686 0],'LineWidth',1)
-    ylim([-0.06 0.06]); xlim([1 length(motion)]); set(gca,'FontSize',12,'XTickLabel',[])
-    if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
-        ylabel({'{\bfRotations}','[rads]'},'rotation',90)
-    else
-        ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+    if size(motion,2)==6
+        subplot(413)
+        hold on
+        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
+        plot(motion(:,2),'Color',[1 0.5686 0],'LineWidth',1)
+        plot(motion(:,3),'Color',[1 0.5686 0],'LineWidth',1)
+        ylim([-0.06 0.06]); xlim([1 length(motion)]); set(gca,'FontSize',12,'XTickLabel',[])
+        if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+            ylabel({'{\bfRotations}','[rads]'},'rotation',90)
+        else
+            ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+        end
+        hold off
+        subplot(414)
+        hold on
+        plot(motion(:,4),'Color',[1 0 0],'LineWidth',1.5)
+        plot(motion(:,5),'Color',[1 0 0],'LineWidth',1.5)
+        plot(motion(:,6),'Color',[1 0 0],'LineWidth',1.5)
+        ylim([-6 6]); xlim([1 length(motion)])
+        if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+            ylabel({'{\bfTranslations}','[mm]'},'rotation',90)
+        else
+            ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+        end
+        xlabel('{\bfTRs}'); set(gca,'FontSize',12)
+        hold off
+    elseif size(motion,2)==2
+        % Plotting only 2 motion parameters
+        % sct_fmri_moco outputs just X and Y
+        subplot(413)
+        hold on
+        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
+        ylim([-6 6]); xlim([1 length(motion)])
+        ylabel({'{\bfX}','[mm]'},'rotation',90)
+        subplot(414)
+        plot(motion(:,2),'Color',[1 0 0],'LineWidth',1.5)
+        ylim([-6 6]); xlim([1 length(motion)])
+        ylabel({'{\bfY}','[mm]'},'rotation',90)
+        xlabel('{\bfTRs}'); set(gca,'FontSize',12)
+        hold off
     end
-    hold off
-    subplot(414)
-    hold on
-    plot(motion(:,4),'Color',[1 0 0],'LineWidth',1.5)
-    plot(motion(:,5),'Color',[1 0 0],'LineWidth',1.5)
-    plot(motion(:,6),'Color',[1 0 0],'LineWidth',1.5)
-    ylim([-6 6]); xlim([1 length(motion)])
-    if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
-        ylabel({'{\bfTranslations}','[mm]'},'rotation',90)
-    else
-        ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
-    end
-    xlabel('{\bfTRs}'); set(gca,'FontSize',12)
-    hold off
     if (bySlice==1) && (useLevels==1)
         % Plot vertebral level next to heatmap
         subplot('Position',[0.111 0.5482 0.019 0.3768])
