@@ -759,116 +759,116 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     subplot('Position',[left+heatmap_w-0.05+tstat_w*2 heatmap_bot tstat_w heatmap_h]) % HR
     imagesc(abs(tstats_2_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
 end
-% 
-% %% Motion trace plot
-% if (options.mocoLoc ~= "-")
-%     figure('Name','Motion','Renderer', 'painters', 'Position', [50 1000 683 700])
-%     subplot(4,1,[1,2])
-%     imagesc(heatmap)
-%     set(gca,'YTickLabel',[],'XTickLabel',[]); pbaspect([2 1 1])
-%     caxis([c1 c2]); colormap gray
-%     if size(motion,2)==6
-%         subplot(413)
-%         hold on
-%         plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
-%         plot(motion(:,2),'Color',[1 0.5686 0],'LineWidth',1)
-%         plot(motion(:,3),'Color',[1 0.5686 0],'LineWidth',1)
-%         ylim([-0.06 0.06]); xlim([1 length(motion)]); set(gca,'FontSize',12,'XTickLabel',[])
-%         if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
-%             ylabel({'{\bfRotations}','[rads]'},'rotation',90)
-%         else
-%             ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
-%         end
-%         hold off
-%         subplot(414)
-%         hold on
-%         plot(motion(:,4),'Color',[1 0 0],'LineWidth',1.5)
-%         plot(motion(:,5),'Color',[1 0 0],'LineWidth',1.5)
-%         plot(motion(:,6),'Color',[1 0 0],'LineWidth',1.5)
-%         ylim([-6 6]); xlim([1 length(motion)])
-%         if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
-%             ylabel({'{\bfTranslations}','[mm]'},'rotation',90)
-%         else
-%             ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
-%         end
-%         xlabel('{\bfTRs}'); set(gca,'FontSize',12)
-%         hold off
-%     elseif size(motion,2)==2
-%         % Plotting only 2 motion parameters
-%         % sct_fmri_moco outputs just X and Y
-%         subplot(413)
-%         hold on
-%         plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
-%         ylim([-6 6]); xlim([1 length(motion)])
-%         ylabel({'{\bfX}','[mm]'},'rotation',90)
-%         subplot(414)
-%         plot(motion(:,2),'Color',[1 0 0],'LineWidth',1.5)
-%         ylim([-6 6]); xlim([1 length(motion)])
-%         ylabel({'{\bfY}','[mm]'},'rotation',90)
-%         xlabel('{\bfTRs}'); set(gca,'FontSize',12)
-%         hold off
-%     end
-%     if (bySlice==1) && (useLevels==1)
-%         % Plot vertebral level next to heatmap
-%         subplot('Position',[0.111 0.5482 0.019 0.3768])
-%         imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
-%         caxis([0 max(vertebralLevels(:,1))]); 
-%         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
-%     elseif bySlice==0
-%         if useLevels==1
-%             % Draw line b/t tissue types ---- why is this here I'm confused
-%             subplot(4,1,[1,2])
-%             line([0 nRow], [gmEnds+0.5 gmEnds+0.5],'Color','white','LineWidth',0.7) 
-%         end
-%         % Plot tissue next to heatmap [x0 y0 width height]
-%         subplot('Position',[0.111 0.5482 0.019 0.3768])
-%         imagesc(tissueColorbar); colormap(gca,greengrayMap)
-%         caxis([0 max(tissueColorbar(:,1))]);
-%         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
-%     end
-%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_motion_blur',options.PlotSmoothData,'.jpg'))
-% end
-% 
-% %% DVARS plotting (and FD?)
-% dvars=load('dvars.txt');
-% dvars(1)=NaN;
-% figure('Name','DVARS', 'Renderer', 'painters','Position', [50 1000 630 500])
-% subplot(311)
-% plot(1:n,dvars,'b','LineWidth',1.5); xlim([0 length(dvars)]); ylim([0 max(dvars)])
-% ylabel('DVARS','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
-% subplot(3,1,[2,3])
-% imagesc(heatmap)
-% set(gca,'YTickLabel',[]); pbaspect([2 1 1])
-% xlabel('{\bfTRs}'); caxis([c1 c2]); colormap gray
-% if (bySlice==1) && (useLevels==1)
-%     % Plot vertebral level next to heatmap
-%     subplot('Position',[0.11 0.124 0.019 0.488])
-%     imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
-%     caxis([0 max(vertebralLevels(:,1))]); 
-%     set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
-% elseif bySlice==0
-%     % Plot tissue next to heatmap [x0 y0 width height]
-%     subplot('Position',[0.11 0.124 0.019 0.488])
-%     imagesc(tissueColorbar); colormap(gca,greengrayMap)
-%     caxis([0 max(tissueColorbar(:,1))]);
-%     set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
-% end
-% %% Write out files if requested saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
-% if write_out==1
-%     if bySlice==1
-%         order='bySlice';
-%     elseif bySlice==0
-%         order='byTissue';
-%     end
-%     writematrix(heatmap,[input_folder '/' prefix order '_heatmap.txt'],'Delimiter','tab')
-%     writematrix(voxelDir,[input_folder '/' prefix order 'voxelDirectory.txt'],'Delimiter','tab')
-%     if tstats
-%         writematrix(voxelDir,[input_folder '/' prefix order '_tstats.txt'],'Delimiter','tab')
-%     end
-% end
-% fprintf(['\nFile(s) saved to: ' input_folder '\n'])
-% %% Remove added paths
-% rmpath(input_folder)
-% rmpath(phys_loc)
-% 
-% fprintf('\n...done!\n')
+
+%% Motion trace plot
+if (options.mocoLoc ~= "-")
+    figure('Name','Motion','Renderer', 'painters', 'Position', [50 1000 683 700])
+    subplot(4,1,[1,2])
+    imagesc(heatmap)
+    set(gca,'YTickLabel',[],'XTickLabel',[]); pbaspect([2 1 1])
+    caxis([c1 c2]); colormap gray
+    if size(motion,2)==6
+        subplot(413)
+        hold on
+        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
+        plot(motion(:,2),'Color',[1 0.5686 0],'LineWidth',1)
+        plot(motion(:,3),'Color',[1 0.5686 0],'LineWidth',1)
+        ylim([-0.06 0.06]); xlim([1 length(motion)]); set(gca,'FontSize',12,'XTickLabel',[])
+        if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+            ylabel({'{\bfRotations}','[rads]'},'rotation',90)
+        else
+            ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+        end
+        hold off
+        subplot(414)
+        hold on
+        plot(motion(:,4),'Color',[1 0 0],'LineWidth',1.5)
+        plot(motion(:,5),'Color',[1 0 0],'LineWidth',1.5)
+        plot(motion(:,6),'Color',[1 0 0],'LineWidth',1.5)
+        ylim([-6 6]); xlim([1 length(motion)])
+        if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+            ylabel({'{\bfTranslations}','[mm]'},'rotation',90)
+        else
+            ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+        end
+        xlabel('{\bfTRs}'); set(gca,'FontSize',12)
+        hold off
+    elseif size(motion,2)==2
+        % Plotting only 2 motion parameters
+        % sct_fmri_moco outputs just X and Y
+        subplot(413)
+        hold on
+        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
+        ylim([-6 6]); xlim([1 length(motion)])
+        ylabel({'{\bfX}','[mm]'},'rotation',90)
+        subplot(414)
+        plot(motion(:,2),'Color',[1 0 0],'LineWidth',1.5)
+        ylim([-6 6]); xlim([1 length(motion)])
+        ylabel({'{\bfY}','[mm]'},'rotation',90)
+        xlabel('{\bfTRs}'); set(gca,'FontSize',12)
+        hold off
+    end
+    if (bySlice==1) && (useLevels==1)
+        % Plot vertebral level next to heatmap
+        subplot('Position',[0.111 0.5482 0.019 0.3768])
+        imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
+        caxis([0 max(vertebralLevels(:,1))]); 
+        set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+    elseif bySlice==0
+        if useLevels==1
+            % Draw line b/t tissue types ---- why is this here I'm confused
+            subplot(4,1,[1,2])
+            line([0 nRow], [gmEnds+0.5 gmEnds+0.5],'Color','white','LineWidth',0.7) 
+        end
+        % Plot tissue next to heatmap [x0 y0 width height]
+        subplot('Position',[0.111 0.5482 0.019 0.3768])
+        imagesc(tissueColorbar); colormap(gca,greengrayMap)
+        caxis([0 max(tissueColorbar(:,1))]);
+        set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+    end
+    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_motion_blur',options.PlotSmoothData,'.jpg'))
+end
+
+%% DVARS plotting (and FD?)
+dvars=load('dvars.txt');
+dvars(1)=NaN;
+figure('Name','DVARS', 'Renderer', 'painters','Position', [50 1000 630 500])
+subplot(311)
+plot(1:n,dvars,'b','LineWidth',1.5); xlim([0 length(dvars)]); ylim([0 max(dvars)])
+ylabel('DVARS','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+subplot(3,1,[2,3])
+imagesc(heatmap)
+set(gca,'YTickLabel',[]); pbaspect([2 1 1])
+xlabel('{\bfTRs}'); caxis([c1 c2]); colormap gray
+if (bySlice==1) && (useLevels==1)
+    % Plot vertebral level next to heatmap
+    subplot('Position',[0.11 0.124 0.019 0.488])
+    imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
+    caxis([0 max(vertebralLevels(:,1))]); 
+    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+elseif bySlice==0
+    % Plot tissue next to heatmap [x0 y0 width height]
+    subplot('Position',[0.11 0.124 0.019 0.488])
+    imagesc(tissueColorbar); colormap(gca,greengrayMap)
+    caxis([0 max(tissueColorbar(:,1))]);
+    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+end
+%% Write out files if requested saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
+if write_out==1
+    if bySlice==1
+        order='bySlice';
+    elseif bySlice==0
+        order='byTissue';
+    end
+    writematrix(heatmap,[input_folder '/' prefix order '_heatmap.txt'],'Delimiter','tab')
+    writematrix(voxelDir,[input_folder '/' prefix order 'voxelDirectory.txt'],'Delimiter','tab')
+    if tstats
+        writematrix(voxelDir,[input_folder '/' prefix order '_tstats.txt'],'Delimiter','tab')
+    end
+end
+fprintf(['\nFile(s) saved to: ' input_folder '\n'])
+%% Remove added paths
+rmpath(input_folder)
+rmpath(phys_loc)
+
+fprintf('\n...done!\n')
