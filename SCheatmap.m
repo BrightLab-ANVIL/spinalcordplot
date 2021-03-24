@@ -232,8 +232,8 @@ p6 = 4.1003e-08; p7 = -1.8802e-06; p8 = 4.8024e-05; p9 = -0.00010991; p10 = 0.00
 d3 = p1.*x.^9 + p2.*x.^8 + p3.*x.^7 + p4.*x.^6 + p5.*x.^5 + p6.*x.^4 + p7.*x.^3 + p8.*x.^2 + p9.*x + p10 ;
 d3(256)=1;
 greengrayMap=[d1' d2' d3'];
-%     Load FSL's colormap:
-%     greengrayMap=load('/usr/local/fsl/fslpython/envs/fslpython/lib/python3.7/...site-packages/fsleyes/assets/colourmaps/brain_colours/greengray.cmap');
+% Load FSL's colormap:
+%greengrayMap=load('/usr/local/fsl/fslpython/envs/fslpython/lib/python3.7/site-packages/fsleyes/assets/colourmaps/brain_colours/greengray.cmap');
 % Slice colormap:
 blueLightBlueMap = [zeros(256,1), linspace(0,1,256)', ones(256,1)]; % from FSL
 %% Define caxis bounds for heatmap (user input or default 0.4)
@@ -618,8 +618,7 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     xlabel('{\bfTRs}')
     colormap gray
     % Add small indicators of where the vertebral levels are
-    if bySlice==1
-        if useLevels==1
+    if (bySlice==1) && (useLevels==1)
             levChange=(min(voxelDir(:,4)):max(voxelDir(:,4))-1); l=1;
             levChange=[levChange' zeros(1,range(voxelDir(:,4)))'];
             for i=2:length(voxelDir)
@@ -631,7 +630,6 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
 %             for level=levChange(:,2)
 %                 line([nCol-10 nCol], [level-0.5 level-0.5], 'Color','white')
 %             end
-        end
         % Plot vertebral level next to heatmap
         subplot('Position',[left-0.01 heatmap_bot 0.01 heatmap_h])
         imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
@@ -727,40 +725,6 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     subplot('Position',[left+heatmap_w-0.05+tstat_w*2 heatmap_bot tstat_w heatmap_h]) % HR
     imagesc(abs(tstats_1_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
 end
-%% Reorganize data and plot by t-statistic magnitude - GLMtstats(1)
-if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
-    % GLMtstats(1) heatmap
-    temp_sorter=[abs(tstats(:,1)) heatmap];
-    heatmap_1_sort=sortrows(temp_sorter,1,'descend');
-    heatmap_1_sort=heatmap_1_sort(:,2:end);
-    % GLMtstats(1) tstats
-    temp_sorter=[abs(tstats(:,1)) tstats];
-    tstats_1_sort=sortrows(temp_sorter,1,'descend');
-    tstats_1_sort=tstats_1_sort(:,2:end);
-%%% Positions:
-    heatmap_w=0.75; heatmap_h=heatmap_w/2; tstat_w=0.0519; heatmap_bot=0.12;
-    % Physio (plotting nonconvolved even though convolved were used for the GLM...)
-    figure('Name',strcat("Plot data by ",options.GLMtask(1)," t-statistic magnitude"),'Renderer', 'painters', 'Position', [50 1000 800 700])
-    subplot('Position',[left heatmap_h+0.35 heatmap_w heatmap_h/2])
-    plot(phys.(options.GLMtask(1)),'c','LineWidth',1.5); xlim([0 length(phys.(options.GLMtask(1)))]); set(gca,'xtick',[],'FontSize',12)
-    ylabel(label.(options.GLMtask(1)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
-    subplot('Position',[left heatmap_h+0.15 heatmap_w heatmap_h/2])
-    plot(phys.(options.GLMtask(2)),'g','LineWidth',1.5); xlim([0 length(phys.(options.GLMtask(2)))]); set(gca,'xtick',[],'FontSize',12)
-    ylabel(label.(options.GLMtask(2)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
-    % Heatmap
-    subplot('Position',[left heatmap_bot heatmap_w heatmap_h])
-    imagesc(heatmap_1_sort)
-    set(gca,'YTickLabel',[],'FontSize',12);
-    caxis([c1 c2])
-    xlabel('{\bfTRs}')
-    colormap gray
-    % GLM tstats ( Position: [x0 y0 width height] )
-    subplot('Position',[left+heatmap_w-0.05+tstat_w*1 heatmap_bot tstat_w heatmap_h]) % CO2
-    imagesc(abs(tstats_1_sort(:,1))); set(gca,'xtick',[],'ytick',[]); colormap(gca,cyanMap); caxis([0 5]); title(options.GLMtask(1))
-    subplot('Position',[left+heatmap_w-0.05+tstat_w*2 heatmap_bot tstat_w heatmap_h]) % HR
-    imagesc(abs(tstats_1_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
-end
-
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(2)
 if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     % HR heatmap
@@ -849,11 +813,11 @@ if (options.mocoLoc ~= "-")
         caxis([0 max(vertebralLevels(:,1))]); 
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     elseif bySlice==0
-        if useLevels==1
-            % Draw line b/t tissue types ---- why is this here I'm confused
-            subplot(4,1,[1,2])
-            line([0 nRow], [gmEnds+0.5 gmEnds+0.5],'Color','white','LineWidth',0.7) 
-        end
+%         if useLevels==1
+%             % Draw line b/t tissue types ---- why is this here I'm confused
+%             subplot(4,1,[1,2])
+%             line([0 nRow], [gmEnds+0.5 gmEnds+0.5],'Color','white','LineWidth',0.7) 
+%         end
         % Plot tissue next to heatmap [x0 y0 width height]
         subplot('Position',[0.111 0.5482 0.019 0.3768])
         imagesc(tissueColorbar); colormap(gca,greengrayMap)
