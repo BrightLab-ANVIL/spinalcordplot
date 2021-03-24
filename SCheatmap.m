@@ -23,7 +23,7 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 %                                                           (or 2DOF: X & Y)
 %                                                 
 % "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"] -> order of columns
-                    
+%
 % "cBound", 0.3 --------------------------------> caxis abs value of limit around zero (default: 0.4)
 % "PlotSmoothData", 1 --------------------------> 1 or 0: 1 will plot smoothed data (default: 0)
 % "Traces", ["RVT" "HR"] -----------------------> choose physio traces to focus on
@@ -363,6 +363,7 @@ label.CO2={'{\bfP_{ET}CO_{2}}','[mmHg]'};
 label.HR={'{\bfHR}','[bpm]'};
 label.RVT={'{\bfRVT}'};
 label.O2={'{\bfO2}'};   
+
 %% Plot data ordered by tissue
 if bySlice==0
     gmEnds=size(maskts{size(maskts,2)},2); % Size of GM graph portion
@@ -692,6 +693,39 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
         subplot('Position',[left+heatmap_w-0.04+tstat_w*4 heatmap_bot 0.0419 heatmap_h]) % Y
         imagesc(abs(tstats(:,4))); set(gca,'xtick',[],'ytick',[],'FontSize',12);  colormap(gca,translationsMap); caxis([0 5])
     end
+end
+%% Reorganize data and plot by t-statistic magnitude - GLMtstats(1)
+if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
+    % GLMtstats(1) heatmap
+    temp_sorter=[abs(tstats(:,1)) heatmap];
+    heatmap_1_sort=sortrows(temp_sorter,1,'descend');
+    heatmap_1_sort=heatmap_1_sort(:,2:end);
+    % GLMtstats(1) tstats
+    temp_sorter=[abs(tstats(:,1)) tstats];
+    tstats_1_sort=sortrows(temp_sorter,1,'descend');
+    tstats_1_sort=tstats_1_sort(:,2:end);
+%%% Positions:
+    heatmap_w=0.75; heatmap_h=heatmap_w/2; tstat_w=0.0519; heatmap_bot=0.12;
+    % Physio (plotting nonconvolved even though convolved were used for the GLM...)
+    figure('Name',strcat("Plot data by ",options.GLMtask(1)," t-statistic magnitude"),'Renderer', 'painters', 'Position', [50 1000 800 700])
+    subplot('Position',[left heatmap_h+0.35 heatmap_w heatmap_h/2])
+    plot(phys.(options.GLMtask(1)),'c','LineWidth',1.5); xlim([0 length(phys.(options.GLMtask(1)))]); set(gca,'xtick',[],'FontSize',12)
+    ylabel(label.(options.GLMtask(1)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
+    subplot('Position',[left heatmap_h+0.15 heatmap_w heatmap_h/2])
+    plot(phys.(options.GLMtask(2)),'g','LineWidth',1.5); xlim([0 length(phys.(options.GLMtask(2)))]); set(gca,'xtick',[],'FontSize',12)
+    ylabel(label.(options.GLMtask(2)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
+    % Heatmap
+    subplot('Position',[left heatmap_bot heatmap_w heatmap_h])
+    imagesc(heatmap_1_sort)
+    set(gca,'YTickLabel',[],'FontSize',12);
+    caxis([c1 c2])
+    xlabel('{\bfTRs}')
+    colormap gray
+    % GLM tstats ( Position: [x0 y0 width height] )
+    subplot('Position',[left+heatmap_w-0.05+tstat_w*1 heatmap_bot tstat_w heatmap_h]) % CO2
+    imagesc(abs(tstats_1_sort(:,1))); set(gca,'xtick',[],'ytick',[]); colormap(gca,cyanMap); caxis([0 5]); title(options.GLMtask(1))
+    subplot('Position',[left+heatmap_w-0.05+tstat_w*2 heatmap_bot tstat_w heatmap_h]) % HR
+    imagesc(abs(tstats_1_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
 end
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(1)
 if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
