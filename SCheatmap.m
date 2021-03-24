@@ -20,9 +20,10 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 %
 % OPTIONAL NAME-VALUE PAIR ARGUMENTS
 % "mocoLoc", "/path/file.txt" ------------------> OPTIONAL: full path to 6DOF motion traces file
+%                                                           (or 2DOF: X & Y)
 %                                                 
 % "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"] -> order of columns
-                    
+%
 % "cBound", 0.3 --------------------------------> caxis abs value of limit around zero (default: 0.4)
 % "PlotSmoothData", 1 --------------------------> 1 or 0: 1 will plot smoothed data (default: 0)
 % "Traces", ["RVT" "HR"] -----------------------> choose physio traces to focus on
@@ -30,7 +31,7 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 % "GLMtask", ["Task" "HR"] ---------------------> indicate that you would like to perform a GLM and 
 %                                                 identify two traces to be used as GLM regressors
 % "basic", 1 -----------------------------------> ONLY output basic plot without traces (default: 0)
-% "Demean", 1 ------------WIP----------------------> Show demeaned traces with plots (default: 0)
+% "demean", 1 ------------WIP----------------------> Show demeaned traces with plots (default: 0)
 %                    sf?????                             
 % 
 % Example using name-value pair arguments (assuming minimum arguments as ...)
@@ -62,7 +63,7 @@ arguments
     prefix (1,:) char
     phys_loc (1,:) char
     options.mocoLoc (1,1) string = "-"
-    options.mocoLabel (1,6) string = ["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"]
+    options.mocoLabel (1,:) string = ["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"]
     options.cBound (1,1) double {mustBePositive} = 0.4
     options.PlotSmoothData (1,1) {mustBeMember(options.PlotSmoothData,[0,1])} = 0
     options.Traces (1,2) string {mustBeMember(options.Traces,["CO2","HR",...
@@ -70,6 +71,7 @@ arguments
     options.GLMtask (1,2) string {mustBeMember(options.GLMtask,["CO2","HR",...
         "O2","RVT","-"])} = ["-" "-"]
     options.basic (1,1) {mustBeMember(options.basic,[0,1])} = 0
+    options.demean (1,1) {mustBeMember(options.demean,[0,1])} = 0
 end
 close all
 addpath(input_folder)
@@ -241,7 +243,6 @@ if (options.basic==1) && (bySlice==0)
     figure('Name','Basic Plot: By Tissue','Renderer', 'painters', 'Position', [50 1000 887 538])
     imagesc(heatmap)
     set(gca,'YTickLabel',[]); pbaspect([2 1 1])
-    gca
     xlabel('{\bfTRs}')
     colormap gray
     caxis([c1 c2])
@@ -334,8 +335,12 @@ if options.mocoLoc ~= "-"
     for i=1:size(motion,2)
         motion(:,i)=motion(:,i)-mean(motion(:,i));
     end
-    if size(motion,2) ~=6
-        warning('Motion file does not have 6 columns. Will ignore.')
+    if (size(motion,2) ~=6) && (size(motion,2) ~=2)
+        warning('Motion file should have 2 (X and Y) or 6 (6DOF motion) columns. Will ignore.')
+    end
+     if ~isequal(size(motion,2),length(options.mocoLabel))
+        error('Number of motion parameters (%d) does not equal number of mocoLabel entries (%d). Exiting.',...
+            size(motion,2),length(options.mocoLabel))
     end
 else
     % Define dummy vector to pass equal length check below
@@ -357,7 +362,7 @@ end
 label.CO2={'{\bfP_{ET}CO_{2}}','[mmHg]'};
 label.HR={'{\bfHR}','[bpm]'};
 label.RVT={'{\bfRVT}'};
-label.O2={'{\bfO2}'};
+label.O2={'{\bfO2}'};   
 
 %% Plot data ordered by tissue
 if bySlice==0
@@ -550,13 +555,17 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     end
     % Loop through each voxel Y individually when calculating beta=pinv(X)*Y
     % the length of beta will be the number of regressors. Then calculate t-stat
-    Bfit = zeros(nRow,9);%
-    tstats=zeros(nRow,8);
+    Bfit = zeros(nRow,size(X,2));
+    tstats=zeros(nRow,size(X,2)-1);
     pin_mult=pinv(X)*pinv(X)';
     pinv_X=pinv(X);
     % Define contrast vectors
-    contrast=[0 1 0 0 0 0 0 0 0; 0 0 1 0 0 0 0 0 0; 0 0 0 1 0 0 0 0 0; 0 0 0 0 1 0 0 0 0;...
-    0 0 0 0 0 1 0 0 0; 0 0 0 0 0 0 1 0 0; 0 0 0 0 0 0 0 1 0; 0 0 0 0 0 0 0 0 1]; 
+    if size(motion,2)==6
+        contrast=[0 1 0 0 0 0 0 0 0; 0 0 1 0 0 0 0 0 0; 0 0 0 1 0 0 0 0 0; 0 0 0 0 1 0 0 0 0;...
+        0 0 0 0 0 1 0 0 0; 0 0 0 0 0 0 1 0 0; 0 0 0 0 0 0 0 1 0; 0 0 0 0 0 0 0 0 1]; 
+    elseif size(motion,2)==2
+        contrast=[0 1 0 0 0; 0 0 1 0 0; 0 0 0 1 0; 0 0 0 0 1];
+    end
     for row=1:nRow
         % Calculate beta coefficients
         Y=heatmap(row,:)';
@@ -584,22 +593,27 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     rotationsMap = [linspace(0,1,256)', linspace(0,0.5686,256)', zeros(256,1)];
     translationsMap = [linspace(0,1,256)', zeros(256,1), zeros(256,1)];
     figure('Name','GLM, Convolved Regressors, and Motion Traces','Renderer', ...
-        'painters','Position',[50 1 693 804])%[50 1000 830 944])
-    % Physio ( Position: [x0 y0 width height] )
-    subplot('Position',[0.13 0.8472 0.3347 0.0604])
+        'painters','Position',[50 1 762 884])
+%%% Positions:
+    if size(motion,2)==6
+        left=0.10; heatmap_bot=0.5131; heatmap_w=0.5147; heatmap_h=heatmap_w/2; phys_h=0.0904;
+    elseif size(motion,2)==2
+        left=0.10; heatmap_bot=0.3631; heatmap_w=0.7147; heatmap_h=heatmap_w/2; phys_h=0.0904;
+    end
+%%% Physio ( Position: [x0 y0 width height] )
+    subplot('Position',[left heatmap_bot+heatmap_h+0.12 heatmap_w phys_h])
     plot(physconv.(options.GLMtask(1)),'c','LineWidth',1.5); xlim([0 length(physconv.(options.GLMtask(1)))])
     xlim([0 length(physconv.(options.GLMtask(2)))]); set(gca,'xtick',[],'FontSize',12)
-    ylabel(options.GLMtask(1),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
-    subplot(10,2,3)
-    subplot('Position',[0.13 0.7808 0.3347 0.0604])
+    ylabel(options.GLMtask(1),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    subplot('Position',[left heatmap_bot+heatmap_h+0.02 heatmap_w phys_h])
     plot(physconv.(options.GLMtask(2)),'g','LineWidth',1.5); xlim([0 length(physconv.(options.GLMtask(2)))])
     xlim([0 length(physconv.(options.GLMtask(2)))]); set(gca,'xtick',[],'FontSize',12)
-    ylabel(options.GLMtask(2),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
-    % Carpet plot
+    ylabel(options.GLMtask(2),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+%%% PLOT HEATMAP
     two_sd=2*std2(heatmap);
-    subplot('Position', [0.13 0.6131 0.3347 0.1442])
+    subplot('Position', [left heatmap_bot heatmap_w heatmap_h])
     imagesc(heatmap)
-    set(gca,'YTickLabel',[],'FontSize',11); pbaspect([2 1 1])
+    set(gca,'YTickLabel',[],'FontSize',11);
     caxis([c1 c2])
     xlabel('{\bfTRs}')
     colormap gray
@@ -617,18 +631,70 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
             for level=levChange(:,2)
                 line([nCol-10 nCol], [level-0.5 level-0.5], 'Color','white')
             end
+%             for level=levChange(:,2)
+%                 line([nCol-10 nCol], [level-0.5 level-0.5], 'Color','white')
+%             end
         end
         % Plot vertebral level next to heatmap
-        subplot('Position',[0.12 0.6131 0.01 0.1442])
+        subplot('Position',[left-0.01 heatmap_bot 0.01 heatmap_h])
         imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
         caxis([0 max(vertebralLevels(:,1))]); 
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     elseif bySlice==0
-        % Plot tissue next to heatmap [x0 y0 width height]
-        subplot('Position',[0.12 0.6131 0.01 0.1442])
+        % Plot tissue type next to heatmap [x0 y0 width height]
+        subplot('Position',[left-0.01 heatmap_bot 0.01 heatmap_h])
         imagesc(tissueColorbar); colormap(gca,greengrayMap)
         caxis([0 max(tissueColorbar(:,1))]);
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+    end
+%%% Motion regressors
+    if size(motion,2)==6
+        motion_h=0.0705;
+        subplot('Position',[left 0.02+(0.005+motion_h)*5 heatmap_w motion_h]) % Rx 
+        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
+        ylabel(options.mocoLabel(1),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+        subplot('Position',[left 0.02+(0.005+motion_h)*4 heatmap_w motion_h]) % Ry 
+        plot(motion(:,2),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
+        ylabel(options.mocoLabel(2),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+        subplot('Position',[left 0.02+(0.005+motion_h)*3 heatmap_w motion_h]) % Rz 
+        plot(motion(:,3),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
+        ylabel(options.mocoLabel(3),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+        subplot('Position',[left 0.02+(0.005+motion_h)*2 heatmap_w motion_h]) % Tx 
+        plot(motion(:,4),'Color',[1 0 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
+        ylabel(options.mocoLabel(4),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+        subplot('Position',[left 0.02+(0.005+motion_h)*1 heatmap_w motion_h]) % Ty 
+        plot(motion(:,5),'Color',[1 0 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
+        ylabel(options.mocoLabel(5),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+        subplot('Position',[left 0.02 heatmap_w motion_h]) % Tz 
+        plot(motion(:,6),'Color',[1 0 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
+        ylabel(options.mocoLabel(6),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    elseif size(motion,2)==2
+        motion_h=0.0705; % phys_h is 0.0904
+        subplot('Position',[left heatmap_bot-0.1631 heatmap_w phys_h]) % X 
+        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
+        ylabel(options.mocoLabel(1),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+        subplot('Position',[left heatmap_bot-0.2631 heatmap_w phys_h]) % Y 
+        plot(motion(:,2),'Color',[1 0 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
+        ylabel(options.mocoLabel(2),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    end
+%%% GLM tstats ( Position: [x0 y0 width height] )
+    tstat_w=0.0419;
+    subplot('Position',[left+heatmap_w-0.04+tstat_w heatmap_bot 0.0419 heatmap_h]) % CO2
+    imagesc(abs(tstats(:,1))); set(gca,'xtick',[],'ytick',[]); colormap(gca,cyanMap); caxis([0 5])
+    subplot('Position',[left+heatmap_w-0.04+tstat_w*2 heatmap_bot 0.0419 heatmap_h]) % HR
+    imagesc(abs(tstats(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5])
+    if size(motion,2)==6
+        subplot('Position',[left+heatmap_w-0.04+tstat_w*3 heatmap_bot 0.1257 heatmap_h]) % MOTION x6
+        imagesc(abs(tstats(:,3:5))); set(gca,'xtick',[],'ytick',[]);  colormap(gca,rotationsMap); caxis([0 5])
+        title('t-statistics','HorizontalAlignment','right','FontSize',12)
+        subplot('Position',[left+heatmap_w-0.04+tstat_w*6 heatmap_bot 0.1257 heatmap_h]) % MOTION x6
+        imagesc(abs(tstats(:,6:8))); set(gca,'xtick',[],'ytick',[],'FontSize',12);  colormap(gca,translationsMap); caxis([0 5])
+    elseif size(motion,2)==2
+        subplot('Position',[left+heatmap_w-0.04+tstat_w*3 heatmap_bot 0.0419 heatmap_h]) % X
+        imagesc(abs(tstats(:,3))); set(gca,'xtick',[],'ytick',[]);  colormap(gca,rotationsMap); caxis([0 5])
+        title('t-statistics','HorizontalAlignment','right','FontSize',12)
+        subplot('Position',[left+heatmap_w-0.04+tstat_w*4 heatmap_bot 0.0419 heatmap_h]) % Y
+        imagesc(abs(tstats(:,4))); set(gca,'xtick',[],'ytick',[],'FontSize',12);  colormap(gca,translationsMap); caxis([0 5])
     end
     % Motion regressors
     subplot('Position',[0.13 0.5292-0.01 0.3347 0.0525]) % Rx 
@@ -691,6 +757,39 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     subplot('Position',[0.5099 0.1100 0.0419 0.3768])
     imagesc(abs(tstats_1_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
 end
+%% Reorganize data and plot by t-statistic magnitude - GLMtstats(1)
+if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
+    % GLMtstats(1) heatmap
+    temp_sorter=[abs(tstats(:,1)) heatmap];
+    heatmap_1_sort=sortrows(temp_sorter,1,'descend');
+    heatmap_1_sort=heatmap_1_sort(:,2:end);
+    % GLMtstats(1) tstats
+    temp_sorter=[abs(tstats(:,1)) tstats];
+    tstats_1_sort=sortrows(temp_sorter,1,'descend');
+    tstats_1_sort=tstats_1_sort(:,2:end);
+%%% Positions:
+    heatmap_w=0.75; heatmap_h=heatmap_w/2; tstat_w=0.0519; heatmap_bot=0.12;
+    % Physio (plotting nonconvolved even though convolved were used for the GLM...)
+    figure('Name',strcat("Plot data by ",options.GLMtask(1)," t-statistic magnitude"),'Renderer', 'painters', 'Position', [50 1000 800 700])
+    subplot('Position',[left heatmap_h+0.35 heatmap_w heatmap_h/2])
+    plot(phys.(options.GLMtask(1)),'c','LineWidth',1.5); xlim([0 length(phys.(options.GLMtask(1)))]); set(gca,'xtick',[],'FontSize',12)
+    ylabel(label.(options.GLMtask(1)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
+    subplot('Position',[left heatmap_h+0.15 heatmap_w heatmap_h/2])
+    plot(phys.(options.GLMtask(2)),'g','LineWidth',1.5); xlim([0 length(phys.(options.GLMtask(2)))]); set(gca,'xtick',[],'FontSize',12)
+    ylabel(label.(options.GLMtask(2)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
+    % Heatmap
+    subplot('Position',[left heatmap_bot heatmap_w heatmap_h])
+    imagesc(heatmap_1_sort)
+    set(gca,'YTickLabel',[],'FontSize',12);
+    caxis([c1 c2])
+    xlabel('{\bfTRs}')
+    colormap gray
+    % GLM tstats ( Position: [x0 y0 width height] )
+    subplot('Position',[left+heatmap_w-0.05+tstat_w*1 heatmap_bot tstat_w heatmap_h]) % CO2
+    imagesc(abs(tstats_1_sort(:,1))); set(gca,'xtick',[],'ytick',[]); colormap(gca,cyanMap); caxis([0 5]); title(options.GLMtask(1))
+    subplot('Position',[left+heatmap_w-0.05+tstat_w*2 heatmap_bot tstat_w heatmap_h]) % HR
+    imagesc(abs(tstats_1_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
+end
 
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(2)
 if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
@@ -704,65 +803,75 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     tstats_2_sort=tstats_2_sort(:,2:end);
     clear temp_sorter
     % Physio
-    figure('Name',strcat("Plot data by ",options.GLMtask(2)," t-statistic magnitude"),'Renderer', 'painters', 'Position', [50 1000 1398 621])%1457 648])
-    subplot(4,2,1)
+    figure('Name',strcat("Plot data by ",options.GLMtask(2)," t-statistic magnitude"),'Renderer', 'painters', 'Position', [50 1000 800 700])
+    subplot('Position',[left heatmap_h+0.35 heatmap_w heatmap_h/2])
     plot(phys.(options.GLMtask(1)),'c','LineWidth',1.5); xlim([0 length(phys.(options.GLMtask(1)))]); set(gca,'xtick',[],'FontSize',12)
     ylabel(label.(options.GLMtask(1)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
-    subplot(4,2,3)
+    subplot('Position',[left heatmap_h+0.15 heatmap_w heatmap_h/2])
     plot(phys.(options.GLMtask(2)),'g','LineWidth',1.5); xlim([0 length(phys.(options.GLMtask(2)))]); set(gca,'xtick',[],'FontSize',12)
     ylabel(label.(options.GLMtask(2)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
     % Heatmap
-    subplot(4,2,[5,7])
+    subplot('Position',[left heatmap_bot heatmap_w heatmap_h])
     imagesc(heatmap_2_sort)
-    set(gca,'YTickLabel',[],'FontSize',12); pbaspect([2 1 1])
+    set(gca,'YTickLabel',[],'FontSize',12);
     caxis([c1 c2])
     xlabel('{\bfTRs}')
     colormap gray
     % GLM tstats ( Position: [x0 y0 width height] )
-    subplot('Position',[0.4680 0.1100 0.0419 0.3768]) % CO2
+    subplot('Position',[left+heatmap_w-0.05+tstat_w*1 heatmap_bot tstat_w heatmap_h]) % CO2
     imagesc(abs(tstats_2_sort(:,1))); set(gca,'xtick',[],'ytick',[]); colormap(gca,cyanMap); caxis([0 5]); title(options.GLMtask(1))
-    subplot('Position',[0.5099 0.1100 0.0419 0.3768]) % HR
+    subplot('Position',[left+heatmap_w-0.05+tstat_w*2 heatmap_bot tstat_w heatmap_h]) % HR
     imagesc(abs(tstats_2_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
 end
- 
-%% Condensed motion regressor plot
+
+%% Motion trace plot
 if (options.mocoLoc ~= "-")
-    figure('Name','Translations and Rotations','Renderer', 'painters', 'Position', [50 1000 683 700])
+    figure('Name','Motion','Renderer', 'painters', 'Position', [50 1000 683 700])
     subplot(4,1,[1,2])
     imagesc(heatmap)
-%     if bySlice==1
-%         ylabel('\leftarrow Inferior                    Superior \rightarrow')
-%     elseif bySlice==0
-%         
-%         ylabel('\leftarrow Outer/WM                           Inner/GM \rightarrow')
-%     end
     set(gca,'YTickLabel',[],'XTickLabel',[]); pbaspect([2 1 1])
     caxis([c1 c2]); colormap gray
-    subplot(413)
-    hold on
-    plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
-    plot(motion(:,2),'Color',[1 0.5686 0],'LineWidth',1)
-    plot(motion(:,3),'Color',[1 0.5686 0],'LineWidth',1)
-    ylim([-0.06 0.06]); xlim([1 length(motion)]); set(gca,'FontSize',12,'XTickLabel',[])
-    if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
-        ylabel({'{\bfRotations}','[rads]'},'rotation',90)
-    else
-        ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+    if size(motion,2)==6
+        subplot(413)
+        hold on
+        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
+        plot(motion(:,2),'Color',[1 0.5686 0],'LineWidth',1)
+        plot(motion(:,3),'Color',[1 0.5686 0],'LineWidth',1)
+        ylim([-0.06 0.06]); xlim([1 length(motion)]); set(gca,'FontSize',12,'XTickLabel',[])
+        if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+            ylabel({'{\bfRotations}','[rads]'},'rotation',90)
+        else
+            ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+        end
+        hold off
+        subplot(414)
+        hold on
+        plot(motion(:,4),'Color',[1 0 0],'LineWidth',1.5)
+        plot(motion(:,5),'Color',[1 0 0],'LineWidth',1.5)
+        plot(motion(:,6),'Color',[1 0 0],'LineWidth',1.5)
+        ylim([-6 6]); xlim([1 length(motion)])
+        if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
+            ylabel({'{\bfTranslations}','[mm]'},'rotation',90)
+        else
+            ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
+        end
+        xlabel('{\bfTRs}'); set(gca,'FontSize',12)
+        hold off
+    elseif size(motion,2)==2
+        % Plotting only 2 motion parameters
+        % sct_fmri_moco outputs just X and Y
+        subplot(413)
+        hold on
+        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
+        ylim([-6 6]); xlim([1 length(motion)])
+        ylabel({'{\bfX}','[mm]'},'rotation',90)
+        subplot(414)
+        plot(motion(:,2),'Color',[1 0 0],'LineWidth',1.5)
+        ylim([-6 6]); xlim([1 length(motion)])
+        ylabel({'{\bfY}','[mm]'},'rotation',90)
+        xlabel('{\bfTRs}'); set(gca,'FontSize',12)
+        hold off
     end
-    hold off
-    subplot(414)
-    hold on
-    plot(motion(:,4),'Color',[1 0 0],'LineWidth',1.5)
-    plot(motion(:,5),'Color',[1 0 0],'LineWidth',1.5)
-    plot(motion(:,6),'Color',[1 0 0],'LineWidth',1.5)
-    ylim([-6 6]); xlim([1 length(motion)])
-    if all(options.mocoLabel==["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"])
-        ylabel({'{\bfTranslations}','[mm]'},'rotation',90)
-    else
-        ylabel(append(options.mocoLabel(1),",",options.mocoLabel(2),",",options.mocoLabel(3)),'FontWeight','bold')
-    end
-    xlabel('{\bfTRs}'); set(gca,'FontSize',12)
-    hold off
     if (bySlice==1) && (useLevels==1)
         % Plot vertebral level next to heatmap
         subplot('Position',[0.111 0.5482 0.019 0.3768])
