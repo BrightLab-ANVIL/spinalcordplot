@@ -129,7 +129,8 @@ if [[ $YN =~ ^([yY])$ ]]; then
   # After this, ${csfCord} is really csf+gm+wm
   # Erode and make masks (descriptions for each of these steps in WM section)
   # Use cord for subtraction (input)
-  sct_maths -i ${csfCord} -o ${outputdir}/erosion${o}.nii.gz -erode 3,3,1
+  # In sct 4.2.2 sct_maths used : -erode 3,3,1. Updated to sct v. 5.2.0 : -erode 1 -shape disk -dim 2
+  sct_maths -i ${csfCord} -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
   sct_maths -i ${csfCord} -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
   sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${input}
   fslmaths ${outputdir}/sub_cord_TEMP.nii.gz -thr 0 -bin ${outputdir}/mask${o}.nii.gz
@@ -142,7 +143,7 @@ if [[ $YN =~ ^([yY])$ ]]; then
   while (( ${mask_avg} > 0 ))
   do
     o=$(( o+1 ))
-    sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/erosion${o}.nii.gz -erode 3,3,1
+    sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
     sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
     sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${input}
     fslmaths ${outputdir}/sub_cord_TEMP.nii.gz -thr 0 -bin ${outputdir}/mask${o}.nii.gz
@@ -178,7 +179,7 @@ fi
 # WM EROSION AND MASK CREATION:
 # Create first mask using full cord mask:
 # Erode voxel layer from outer edges
-sct_maths -i ${input} -o ${outputdir}/erosion${o}.nii.gz -erode 3,3,1
+sct_maths -i ${input} -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
 # Subtract erosion from full mask to get only outer edge mask
 sct_maths -i ${input} -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
 # Subtract gm mask from mask to have no gm/wm overlap
@@ -200,7 +201,7 @@ echo "mask${o}.nii.gz" >> ${outputdir}/maskDescriptions.txt
 while (( ${mask_avg} > 0 ))
 do
   o=$(( o+1 ))
-  sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/erosion${o}.nii.gz -erode 3,3,1
+  sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
   sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
   sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_gm_TEMP.nii.gz -sub ${gm}
   fslmaths ${outputdir}/sub_gm_TEMP.nii.gz -thr 0.1 -bin ${outputdir}/mask${o}.nii.gz
@@ -278,18 +279,17 @@ fslmeants -i ${func} -m ${outputdir}/tracts/RFC_mask.nii.gz --showall > ${output
 fslmeants -i ${func} -m ${outputdir}/tracts/LFG_mask.nii.gz --showall > ${outputdir}/tracts/LFGts.txt
 fslmeants -i ${func} -m ${outputdir}/tracts/RFG_mask.nii.gz --showall > ${outputdir}/tracts/RFGts.txt
 ###############################################################################
-# # # Smoothing (WIP)
+# # Smoothing (WIP)
+# Blur in cord mask:
 echo "\nDelete top and bottom slice in mask (for smoothing).\nOverwrite file when saving (PAM50_cord_forSmoothing.nii.gz).\n"
 cp ${input} template/PAM50_cord_forSmoothing.nii.gz
 blurMask=template/PAM50_cord_forSmoothing.nii.gz
 fsleyes ${blurMask}
-#### ^ Find a way to automate this after OHBM abstract (maybe fslroi?)
 echo "\nBlurring func data in mask...\n"
-# Blur in cord mask
 3dblurinmask -input ${func} -FWHM 2.9 -Mmask  ${blurMask} \
 -prefix ${outputdir}/func_blur_cord.nii.gz -preserve -quiet
 
-# Calculate blurred timeseries for each mask:
+# Calculate blurred timeseries for each mask
 m=0
 for mask in ${outputdir}/mask*.nii.gz
 do
@@ -297,6 +297,7 @@ do
   fslmeants -i ${outputdir}/func_blur_cord.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
   m=$(( m+1 ))
 done
+
 ###############################################################################
 echo ""
 echo -e "\e[1;35m... done! Runtime: $SECONDS seconds.\e[0m"
