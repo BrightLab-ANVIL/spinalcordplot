@@ -76,8 +76,6 @@ arguments
     options.basic (1,1) {mustBeMember(options.basic,[0,1])} = 0
     options.demean (1,1) {mustBeMember(options.demean,[0,1])} = 0
     options.stim (1,1) string = "-"
-%     options.GLMmoco (1,2) string = ["-" "-"] % To delete
-%     options.mocoLoc (1,1) string = "-" % To delete
 end
 close all
 addpath(input_folder)
@@ -170,7 +168,6 @@ if bySlice==1
         current_ts=maskts{i}; 
         tempPlot(a:b,:)=current_ts';
     end
-    
     % Sort by vertebre levels if indicated
     if useLevels==1
         load('vertebralLevels.txt') 
@@ -339,23 +336,6 @@ phys.(options.Traces(2))=load(strcat(prefix,'_',options.Traces(2),'.txt'));
 % Loading statement
 fprintf(strcat("Loading: ",prefix,"_",options.Traces(1),".txt",...
     " and ",prefix,'_',options.Traces(2),".txt\n"))
-% % % % % % % Load motion and demean (if exists) %%%% To Delete
-% % % % % % if options.mocoLoc ~= "-"
-% % % % % %     motion=load(options.mocoLoc);
-% % % % % %     for i=1:size(motion,2)
-% % % % % %         motion(:,i)=motion(:,i)-mean(motion(:,i));
-% % % % % %     end
-% % % % % %     if (size(motion,2) ~=6) && (size(motion,2) ~=2)
-% % % % % %         warning('Motion file should have 2 (X and Y) or 6 (6DOF motion) columns. Will ignore.')
-% % % % % %     end
-% % % % % %      if ~isequal(size(motion,2),length(options.mocoLabel))
-% % % % % %         error('Number of motion parameters (%d) does not equal number of mocoLabel entries (%d). Exiting.',...
-% % % % % %             size(motion,2),length(options.mocoLabel))
-% % % % % %     end
-% % % % % % else
-% % % % % %     % Define dummy vector to pass equal length check below
-% % % % % %     motion=zeros(size(heatmap,2),1);
-% % % % % % end
 if all(options.moco ~= "-") && (length(options.moco) == 1)
     motion=load(options.moco);
     for i=1:size(motion,2)
@@ -410,9 +390,6 @@ end
 if all(options.moco ~= "-") && (length(options.moco) == 2)
     mocoX=load(options.moco(1));
     mocoY=load(options.moco(2));
-% % % % % % if options.GLMmoco ~= "-" % To delete
-% % % % % %     mocoX=load(options.GLMmoco(1)); % To delete
-% % % % % %     mocoY=load(options.GLMmoco(2)); % To delete
     slicewise_moco_params_X=zeros(size(heatmap));
     slicewise_moco_params_Y=zeros(size(heatmap));
     for s=1:size(mocoX,2)
@@ -497,7 +474,6 @@ if bySlice==1
     ylabel(label.(options.Traces(2)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
     set(gca,'XTickLabel',[],'FontSize',12)
     if useLevels==1
-%         size(voxelDir)
         % Add small indicators of where the vertebral levels are
         levChange=(min(voxelDir(:,4)):max(voxelDir(:,4))-1); l=1;
         levChange=[levChange' zeros(1,range(voxelDir(:,4)))'];
@@ -617,9 +593,7 @@ title((options.Traces(2)))
 xlim([0 nyquist])
 
 %% Run GLM
-% % % % % % % % % % % % if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))  % To delete 
 if (all(options.moco ~= "-")) && (all(options.GLMtask ~= "-"))
-% % % % % % % % % % % % % % % % % % % % % % % %     if options.GLMmoco ~= "-"     % To delete
     if (all(options.moco ~= "-")) && (length(options.moco) == 2)
         % Make slicewise design matrices and demean each
         X=cell(size(heatmap,1),1);
@@ -691,7 +665,6 @@ else
     tstats=[];
 end
 %% Motion, phys, GLM plot
-% % % % % % % % % if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-")) % To delete
 if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     % Define colormaps
     greenMap = [zeros(256,1), linspace(0,1,256)', zeros(256,1)];
@@ -754,7 +727,6 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     end
 %%% Motion regressors
-% % % % % % % % % % % % % % % % % % % % % %     if options.GLMmoco ~= "-" % % To delete
     if all(options.moco ~= "-") && (length(options.moco) == 2)
         subplot('Position',[left heatmap_bot-0.1631 heatmap_w phys_h]); hold on % X motion
         for i=1:size(mocoX,2)
@@ -826,7 +798,6 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     end
 end
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(1)
-% % % % % % % % % % % % if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-")) % To delete
 if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     % GLMtstats(1) heatmap
     temp_sorter=[abs(tstats(:,1)) heatmap];
@@ -865,7 +836,6 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     imagesc(abs(tstats_1_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
 end
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(2)
-% % % % % % % % % % % % % % % % % % if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-")) % To delete
 if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     % HR heatmap
     temp_sorter=[abs(tstats(:,2)) heatmap];
@@ -905,7 +875,6 @@ end
 
 %% Motion trace plot
 if all(options.moco ~= "-")
-% % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % if (options.mocoLoc ~= "-") % To delete
     figure('Name','Motion','Renderer', 'painters', 'Position', [50 1000 683 700])
     subplot(4,1,[1,2])
     imagesc(heatmap); xlabel('{\bfTRs}');
