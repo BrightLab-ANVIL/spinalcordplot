@@ -1,4 +1,4 @@
-function [heatmap,freqmap,voxelDir,slicewise_moco_params_X]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,options)
+function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,options)
 % SCheatmap DESCRIPTION
 % Use masks created by the x.carpetPlots and produce the carpet plot
 % figures in time and frequency domains, plotted with regressors, and
@@ -19,23 +19,26 @@ function [heatmap,freqmap,voxelDir,slicewise_moco_params_X]=SCheatmap(input_fold
 % phys_loc ----------->  full path to phys regressors folder
 %
 % OPTIONAL NAME-VALUE PAIR ARGUMENTS
-% "mocoLoc", "/path/file.txt" ------------------> OPTIONAL: full path to 6DOF motion traces file
-%                                                           (or 2DOF: X & Y summary)
-%                                                 
+% "moco", "/path/file.txt" OR ["/path/mocoX.txt" "/path/mocoY.txt"] --> path or paths to motion data
+%                               %%%%%%add more****info                                                 
 % "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"] -> order of columns
 %
 % "cBound", 0.3 --------------------------------> caxis abs value of limit around zero (default: 0.4)
 % "PlotSmoothData", 1 --------------------------> 1 or 0: 1 will plot smoothed data (default: 0)
-% "Traces", ["RVT" "HR"] -----------------------> choose physio traces to focus on
+% "Traces", ["RVT" "HR"] -----------------------> choose traces to focus on (same length as num TRs)
 %                                                 1x2 string array (default: ["CO2" "HR"])
 % "GLMtask", ["Task" "HR"] ---------------------> indicate that you would like to perform a GLM and 
 %                                                 identify two traces to be used as GLM regressors
 % "basic", 1 -----------------------------------> ONLY output basic plot without traces (default: 0)
 % "stim", "/path/file.txt" ---------------------> Add stimulus timings to plot of first trace 
-% "GLMmoco", ["/path/mocoX.txt" "/path/mocoY.txt"] -> Array with paths to SCT moco output slicewise files
 % "demean", 1 ------------WIP----------------------> Show demeaned traces with plots (default: 0)
-%                    sf?????                             
-% 
+%                    sf?????             
+% To delete::::
+% "mocoLoc", "/path/file.txt" ------------------> OPTIONAL: full path to 6DOF motion traces file
+%                                                           (or 2DOF: X & Y summary)
+% "GLMmoco", ["/path/mocoX.txt" "/path/mocoY.txt"] -> Array with paths to SCT moco output slicewise files
+% :::
+%
 % Example using name-value pair arguments (assuming minimum arguments as ...)
 % SCheatmap(..., "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"], "PlotSmoothData", 1, "GLMtask", ["CO2" "HR"])
 % 
@@ -64,7 +67,7 @@ arguments
     TR (1,1) {mustBeNumeric,mustBePositive}
     prefix (1,:) char
     phys_loc (1,:) char
-    options.mocoLoc (1,1) string = "-"
+    options.moco (1,:) string = "-"
     options.mocoLabel (1,:) string = ["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"]
     options.cBound (1,1) double {mustBePositive} = 0.4
     options.PlotSmoothData (1,1) {mustBeMember(options.PlotSmoothData,[0,1])} = 0
@@ -73,7 +76,8 @@ arguments
     options.basic (1,1) {mustBeMember(options.basic,[0,1])} = 0
     options.demean (1,1) {mustBeMember(options.demean,[0,1])} = 0
     options.stim (1,1) string = "-"
-    options.GLMmoco (1,2) string = ["-" "-"]
+%     options.GLMmoco (1,2) string = ["-" "-"] % To delete
+%     options.mocoLoc (1,1) string = "-" % To delete
 end
 close all
 addpath(input_folder)
@@ -219,23 +223,6 @@ heatmap=zeros(size(heatmap_preNorm));
 for r=1:nRow
     heatmap(r,:)=(heatmap_preNorm(r,:)-mean_ts(r))./range(mean_ts);
 end
-%% Load and organize slicewise motion correction parameters
-if options.GLMmoco ~= "-"
-    mocoX=load(options.GLMmoco(1));
-    mocoY=load(options.GLMmoco(2));
-    slicewise_moco_params_X=zeros(size(heatmap));
-    slicewise_moco_params_Y=zeros(size(heatmap));
-    for s=1:size(mocoX,2)
-        slice=mocoX(3,s);
-        temp_voxel_loc=find(voxelDir(:,3)==slice);
-        for v=1:length(temp_voxel_loc)
-            % Find where voxel directory is slice, and add moco timeseries
-            idx=temp_voxel_loc(v);
-            slicewise_moco_params_X(idx,:)=mocoX(4:end,slice);
-            slicewise_moco_params_Y(idx,:)=mocoY(4:end,slice);
-        end
-    end
-end
 %% Define colormaps
 % Tissue colormap:
 % Semi-manually define FSL's greengray colormap (using polynomials)
@@ -325,8 +312,10 @@ elseif (options.basic==1) && (bySlice==1)
 end
 %% Load physiological and motion data
 % Load convolved physiological regressors if user chooses GLMtask
-suffix.(options.GLMtask(1))='';
-suffix.(options.GLMtask(2))='';
+if all(options.GLMtask ~= "-")
+    suffix.(options.GLMtask(1))='';
+    suffix.(options.GLMtask(2))='';
+end
 suffix.HR='_CRFconv';
 suffix.CO2='_HRFconv';
 suffix.RVT='_RRFconv';
@@ -350,38 +339,61 @@ phys.(options.Traces(2))=load(strcat(prefix,'_',options.Traces(2),'.txt'));
 % Loading statement
 fprintf(strcat("Loading: ",prefix,"_",options.Traces(1),".txt",...
     " and ",prefix,'_',options.Traces(2),".txt\n"))
-% Load motion and demean (if exists)
-if options.mocoLoc ~= "-"
-    motion=load(options.mocoLoc);
+% % % % % % % Load motion and demean (if exists) %%%% To Delete
+% % % % % % if options.mocoLoc ~= "-"
+% % % % % %     motion=load(options.mocoLoc);
+% % % % % %     for i=1:size(motion,2)
+% % % % % %         motion(:,i)=motion(:,i)-mean(motion(:,i));
+% % % % % %     end
+% % % % % %     if (size(motion,2) ~=6) && (size(motion,2) ~=2)
+% % % % % %         warning('Motion file should have 2 (X and Y) or 6 (6DOF motion) columns. Will ignore.')
+% % % % % %     end
+% % % % % %      if ~isequal(size(motion,2),length(options.mocoLabel))
+% % % % % %         error('Number of motion parameters (%d) does not equal number of mocoLabel entries (%d). Exiting.',...
+% % % % % %             size(motion,2),length(options.mocoLabel))
+% % % % % %     end
+% % % % % % else
+% % % % % %     % Define dummy vector to pass equal length check below
+% % % % % %     motion=zeros(size(heatmap,2),1);
+% % % % % % end
+if all(options.moco ~= "-") && (length(options.moco) == 1)
+    motion=load(options.moco);
     for i=1:size(motion,2)
         motion(:,i)=motion(:,i)-mean(motion(:,i));
     end
     if (size(motion,2) ~=6) && (size(motion,2) ~=2)
         warning('Motion file should have 2 (X and Y) or 6 (6DOF motion) columns. Will ignore.')
     end
-     if ~isequal(size(motion,2),length(options.mocoLabel))
+    if ~isequal(size(motion,2),length(options.mocoLabel))
         error('Number of motion parameters (%d) does not equal number of mocoLabel entries (%d). Exiting.',...
             size(motion,2),length(options.mocoLabel))
     end
+    if ~isequal(size(heatmap,2), size(motion,1))
+        error('Length of motion traces does not match number of TRs (%d).', size(heatmap,2))
+    end
 else
-    % Define dummy vector to pass equal length check below
-    motion=zeros(size(heatmap,2),1);
+    % Define dummy vector for passing if statement in GLM section
+    motion=zeros(size(heatmap,2),2);
 end
 % Do more checks (equal lengths)
 if options.GLMtask ~= "-"
     if ~isequal(size(heatmap,2), length(phys.(options.Traces(1))), length(phys.(options.Traces(2))), ...
-            length(physconv.(options.GLMtask(1))), length(physconv.(options.GLMtask(2))), size(motion,1))
-        error('Length of traces does not match number of TRs (%d). Check fMRI data, physiological traces, and motion traces.', size(heatmap,2))
+            length(physconv.(options.GLMtask(1))), length(physconv.(options.GLMtask(2))))
+        error('Length of traces does not match number of TRs (%d). Check fMRI data, and physiological traces.', size(heatmap,2))
     end
 else
-    if ~isequal(size(heatmap,2), length(phys.(options.Traces(1))), length(phys.(options.Traces(2))), size(motion,1))
-        error('Length of traces does not match number of TRs (%d). Check fMRI data, physiological traces, and motion traces.', size(heatmap,2))
+    if ~isequal(size(heatmap,2), length(phys.(options.Traces(1))), length(phys.(options.Traces(2))))
+        error('Length of traces does not match number of TRs (%d). Check fMRI data, and physiological traces.', size(heatmap,2))
     end
 end
 % Create labels for phys data                       
 % (can use this format for labels: [label.(options.Traces(1)) label.(option.Traces(2))]
 label.(options.Traces(1))={['{\bf' convertStringsToChars(options.Traces(1))  '}']}; % Add units here later as optional input?
 label.(options.Traces(2))={['{\bf' convertStringsToChars(options.Traces(2))  '}']};  
+if all(options.GLMtask ~= "-")
+    label.(options.GLMtask(1))={['{\bf' convertStringsToChars(options.GLMtask(1))  '}']};  
+    label.(options.GLMtask(2))={['{\bf' convertStringsToChars(options.GLMtask(2))  '}']};  
+end
 label.CO2={'{\bfP_{ET}CO_{2}}','[mmHg]'};
 label.HR={'{\bfHR}','[bpm]'};
 label.RVT={'{\bfRVT}'};
@@ -394,7 +406,26 @@ if options.stim ~= "-"
         error('Length of stimulus timing vector does not match number of TRs (%d).', size(heatmap,2))
     end
 end
-
+%% Load and organize slicewise motion correction parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%
+if all(options.moco ~= "-") && (length(options.moco) == 2)
+    mocoX=load(options.moco(1));
+    mocoY=load(options.moco(2));
+% % % % % % if options.GLMmoco ~= "-" % To delete
+% % % % % %     mocoX=load(options.GLMmoco(1)); % To delete
+% % % % % %     mocoY=load(options.GLMmoco(2)); % To delete
+    slicewise_moco_params_X=zeros(size(heatmap));
+    slicewise_moco_params_Y=zeros(size(heatmap));
+    for s=1:size(mocoX,2)
+        slice=mocoX(3,s);
+        temp_voxel_loc=find(voxelDir(:,3)==slice);
+        for v=1:length(temp_voxel_loc)
+            % Find where voxel directory is slice, and add moco timeseries
+            idx=temp_voxel_loc(v);
+            slicewise_moco_params_X(idx,:)=mocoX(4:end,slice);
+            slicewise_moco_params_Y(idx,:)=mocoY(4:end,slice);
+        end
+    end
+end
 %% Plot data ordered by tissue
 if bySlice==0
     gmEnds=size(maskts{size(maskts,2)},2); % Size of GM graph portion
@@ -586,45 +617,82 @@ title((options.Traces(2)))
 xlim([0 nyquist])
 
 %% Run GLM
-if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
-    X=[ones(size(heatmap,2),1) physconv.(options.GLMtask(1)) physconv.(options.GLMtask(2)) motion];
-    % Demean the design matrix
-    for i=2:size(X,2)
-        X(:,i)=(X(:,i)-mean(X(:,i)))./range(X(:,i));
-    end
-    % Loop through each voxel Y individually when calculating beta=pinv(X)*Y
-    % the length of beta will be the number of regressors. Then calculate t-stat
-    Bfit = zeros(nRow,size(X,2));
-    tstats=zeros(nRow,size(X,2)-1);
-    pin_mult=pinv(X)*pinv(X)';
-    pinv_X=pinv(X);
-    % Define contrast vectors
-    if size(motion,2)==6
-        contrast=[0 1 0 0 0 0 0 0 0; 0 0 1 0 0 0 0 0 0; 0 0 0 1 0 0 0 0 0; 0 0 0 0 1 0 0 0 0;...
-        0 0 0 0 0 1 0 0 0; 0 0 0 0 0 0 1 0 0; 0 0 0 0 0 0 0 1 0; 0 0 0 0 0 0 0 0 1]; 
-    elseif size(motion,2)==2
+% % % % % % % % % % % % if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))  % To delete 
+if (all(options.moco ~= "-")) && (all(options.GLMtask ~= "-"))
+% % % % % % % % % % % % % % % % % % % % % % % %     if options.GLMmoco ~= "-"     % To delete
+    if (all(options.moco ~= "-")) && (length(options.moco) == 2)
+        % Make slicewise design matrices and demean each
+        X=cell(size(heatmap,1),1);
+        for s=1:size(heatmap,1)
+            X{s}=[ones(size(heatmap,2),1) physconv.(options.GLMtask(1)) physconv.(options.GLMtask(2))...
+                slicewise_moco_params_X(s,:)' slicewise_moco_params_Y(s,:)'];
+            % Demean the design matrix
+            for i=2:size(X{s},2)
+                X{s}(:,i)=(X{s}(:,i)-mean(X{s}(:,i)))./range(X{s}(:,i));
+            end
+        end
+        Bfit = zeros(nRow,size(X{1},2));
+        tstats=zeros(nRow,size(X{1},2)-1);
         contrast=[0 1 0 0 0; 0 0 1 0 0; 0 0 0 1 0; 0 0 0 0 1];
-    end
-    for row=1:nRow
-        % Calculate beta coefficients
-        Y=heatmap(row,:)';
-        beta=pinv_X*Y;
-        Bfit(row,:)=beta;
-        % Calculate t-statistics
-        r = Y-X*beta;
-        sumsq=r'*r; 
-        DOF=size(X,1)-size(X,2); % Number of timepoints minus regressors
-        rvar = sumsq/DOF;
-        for i=1:size(contrast,1)
-            c=contrast(i,:);
-            tstats(row,i)=(c*beta)/sqrt(rvar*c*(pin_mult)*c');
+        % Run GLM with slicewise design matrices
+        for row=1:nRow
+            pin_mult=pinv(X{row})*pinv(X{row})';
+            pinv_X=pinv(X{row});
+            % Calculate beta coefficients
+            Y=heatmap(row,:)';
+            beta=pinv_X*Y;
+            Bfit(row,:)=beta;
+            % Calculate t-statistics
+            r = Y-X{row}*beta;
+            sumsq=r'*r; 
+            DOF=size(X{row},1)-size(X{row},2); % Number of timepoints minus regressors
+            rvar = sumsq/DOF;
+            for i=1:size(contrast,1)
+                c=contrast(i,:);
+                tstats(row,i)=(c*beta)/sqrt(rvar*c*(pin_mult)*c');
+            end
+        end
+    elseif length(options.moco) == 1
+        X=[ones(size(heatmap,2),1) physconv.(options.GLMtask(1)) physconv.(options.GLMtask(2)) motion];
+        % Demean the design matrix
+        for i=2:size(X,2)
+            X(:,i)=(X(:,i)-mean(X(:,i)))./range(X(:,i));
+        end
+        % Loop through each voxel Y individually when calculating beta=pinv(X)*Y
+        % the length of beta will be the number of regressors. Then calculate t-stat
+        Bfit = zeros(nRow,size(X,2));
+        tstats=zeros(nRow,size(X,2)-1);
+        pin_mult=pinv(X)*pinv(X)';
+        pinv_X=pinv(X);
+        % Define contrast vectors
+        if size(motion,2)==6
+            contrast=[0 1 0 0 0 0 0 0 0; 0 0 1 0 0 0 0 0 0; 0 0 0 1 0 0 0 0 0; 0 0 0 0 1 0 0 0 0;...
+            0 0 0 0 0 1 0 0 0; 0 0 0 0 0 0 1 0 0; 0 0 0 0 0 0 0 1 0; 0 0 0 0 0 0 0 0 1]; 
+        elseif size(motion,2)==2
+            contrast=[0 1 0 0 0; 0 0 1 0 0; 0 0 0 1 0; 0 0 0 0 1];
+        end
+        for row=1:nRow
+            % Calculate beta coefficients
+            Y=heatmap(row,:)';
+            beta=pinv_X*Y;
+            Bfit(row,:)=beta;
+            % Calculate t-statistics
+            r = Y-X*beta;
+            sumsq=r'*r; 
+            DOF=size(X,1)-size(X,2); % Number of timepoints minus regressors
+            rvar = sumsq/DOF;
+            for i=1:size(contrast,1)
+                c=contrast(i,:);
+                tstats(row,i)=(c*beta)/sqrt(rvar*c*(pin_mult)*c');
+            end
         end
     end
 else
     tstats=[];
 end
 %% Motion, phys, GLM plot
-if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
+% % % % % % % % % if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-")) % To delete
+if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     % Define colormaps
     greenMap = [zeros(256,1), linspace(0,1,256)', zeros(256,1)];
     cyanMap = [zeros(256,1), linspace(0,1,256)', linspace(0,1,256)'];
@@ -686,7 +754,29 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     end
 %%% Motion regressors
-    if size(motion,2)==6
+% % % % % % % % % % % % % % % % % % % % % %     if options.GLMmoco ~= "-" % % To delete
+    if all(options.moco ~= "-") && (length(options.moco) == 2)
+        subplot('Position',[left heatmap_bot-0.1631 heatmap_w phys_h]); hold on % X motion
+        for i=1:size(mocoX,2)
+            plot(mocoX(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
+        end
+        plot(mean(mocoX(4:end,:),2),'LineWidth',1.5,'Color',[1 0.5686 0])
+        if (abs(min(min(mocoX(4:end,:))))<1) && (abs(max(max(mocoX(4:end,:))))<1)
+            ylim([-1 1])
+        end
+        xlim([1 size(heatmap,2)]); set(gca,'FontSize',12,'XTickLabel',[],'xtick',[]);
+        ylabel({'{\bfX Motion}','[mm]'},'rotation',90); hold off
+        subplot('Position',[left heatmap_bot-0.2631 heatmap_w phys_h]); hold on % Y motion
+        for i=1:size(mocoY,2)
+            plot(mocoY(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
+        end
+        plot(mean(mocoY(4:end,:),2),'LineWidth',1.5,'Color',[1 0 0])
+        if (abs(min(min(mocoY(4:end,:))))<1) && (abs(max(max(mocoY(4:end,:))))<1)
+            ylim([-1 1])
+        end
+        ylabel({'{\bfY Motion}','[mm]'},'rotation',90); xlim([1 size(heatmap,2)]); 
+        set(gca,'FontSize',12,'XTickLabel',[],'xtick',[]); hold off
+    elseif size(motion,2)==6
         motion_h=0.0705;
         subplot('Position',[left 0.02+(0.005+motion_h)*5 heatmap_w motion_h]) % Rx 
         plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); 
@@ -709,7 +799,7 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     elseif size(motion,2)==2
         motion_h=0.0705; % phys_h is 0.0904
         subplot('Position',[left heatmap_bot-0.1631 heatmap_w phys_h]) % X 
-        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); ; ylim([-1.2 1.2])
+        plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); ylim([-1.2 1.2])
         ylabel(options.mocoLabel(1),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
         subplot('Position',[left heatmap_bot-0.2631 heatmap_w phys_h]) % Y 
         plot(motion(:,2),'Color',[1 0 0],'LineWidth',1.5); xlim([0 length(motion)]); set(gca,'xtick',[],'FontSize',12); ylim([-1.2 1.2])
@@ -736,7 +826,8 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     end
 end
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(1)
-if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
+% % % % % % % % % % % % if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-")) % To delete
+if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     % GLMtstats(1) heatmap
     temp_sorter=[abs(tstats(:,1)) heatmap];
     heatmap_1_sort=sortrows(temp_sorter,1,'descend');
@@ -752,7 +843,7 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     subplot('Position',[left heatmap_h+0.35 heatmap_w heatmap_h/2]); hold on
     plot(phys.(options.GLMtask(1)),'c','LineWidth',1.5); xlim([0 length(phys.(options.GLMtask(1)))]); set(gca,'xtick',[],'FontSize',12)
     if options.stim ~= "-"
-        ybound=ylim
+        ybound=ylim;
         ylim(ybound); stim_vec=stim+ybound(1);
         plot(stim_vec,'LineWidth',2,'Color',[195/255 196/255 192/255])
     end
@@ -774,7 +865,8 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
     imagesc(abs(tstats_1_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
 end
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(2)
-if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
+% % % % % % % % % % % % % % % % % % if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-")) % To delete
+if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     % HR heatmap
     temp_sorter=[abs(tstats(:,2)) heatmap];
     heatmap_2_sort=sortrows(temp_sorter,1,'descend');
@@ -812,32 +904,37 @@ if (options.mocoLoc ~= "-") && (all(options.GLMtask ~= "-"))
 end
 
 %% Motion trace plot
-if (options.mocoLoc ~= "-")
+if all(options.moco ~= "-")
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % if (options.mocoLoc ~= "-") % To delete
     figure('Name','Motion','Renderer', 'painters', 'Position', [50 1000 683 700])
     subplot(4,1,[1,2])
-    imagesc(heatmap)
-    set(gca,'YTickLabel',[],'XTickLabel',[]); pbaspect([2 1 1])
+    imagesc(heatmap); xlabel('{\bfTRs}');
+    set(gca,'YTickLabel',[],'FontSize',12); pbaspect([2 1 1])
     caxis([c1 c2]); colormap gray
-    if options.GLMmoco ~= "-"
+    if length(options.moco) == 2
         subplot(413) % Plot X
         hold on
-        for i=1:size(heatmap,1)
-            plot(slicewise_moco_params_X(i,:),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
+        for i=1:size(mocoX,2)
+            plot(mocoX(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
-        plot(mean(slicewise_moco_params_X),'LineWidth',1.5,'Color',[1 0.5686 0])
-        ylim([-1 1]); xlim([1 length(motion)])
-        ylabel({'{\bfX}','[mm]'},'rotation',90)
-        hold off
+        plot(mean(mocoX(4:end,:),2),'LineWidth',1.5,'Color',[1 0.5686 0])
+        if (abs(min(min(mocoX(4:end,:))))<1) && (abs(max(max(mocoX(4:end,:))))<1)
+            ylim([-1 1])
+        end
+        xlim([1 size(heatmap,2)]); set(gca,'FontSize',12,'XTickLabel',[]);
+        ylabel({'{\bfX Motion}','[mm]'},'rotation',90); hold off
         subplot(414) % Plot Y
         hold on
-        for i=1:size(heatmap,1)
-            plot(slicewise_moco_params_Y(i,:),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
+        for i=1:size(mocoY,2)
+            plot(mocoY(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
-        plot(mean(slicewise_moco_params_Y),'LineWidth',1.5,'Color',[1 0 0])
-        ylim([-1 1]); xlim([1 length(motion)])
-        ylabel({'{\bfY}','[mm]'},'rotation',90)
-        xlabel('{\bfTRs}'); set(gca,'FontSize',12)
-        hold off
+        plot(mean(mocoY(4:end,:),2),'LineWidth',1.5,'Color',[1 0 0])
+        if (abs(min(min(mocoY(4:end,:))))<1) && (abs(max(max(mocoY(4:end,:))))<1)
+            ylim([-1 1])
+            fprintf('hi')
+        end
+        xlim([1 size(heatmap,2)]); set(gca,'FontSize',12,'XTickLabel',[]); 
+        ylabel({'{\bfY Motion}','[mm]'},'rotation',90); hold off
     elseif size(motion,2)==6
         subplot(413) % Plot rotations
         hold on
@@ -870,7 +967,7 @@ if (options.mocoLoc ~= "-")
         subplot(413) % Plot X average
         hold on
         plot(motion(:,1),'Color',[1 0.5686 0],'LineWidth',1)
-        ylim([-1 1]); xlim([1 length(motion)])
+        ylim([-1 1]); xlim([1 length(motion)]); set(gca,'XTickLabel',[]);
         ylabel({'{\bfX}','[mm]'},'rotation',90)
         subplot(414) % Plot Y average
         plot(motion(:,2),'Color',[1 0 0],'LineWidth',1.5)
@@ -899,24 +996,6 @@ if (options.mocoLoc ~= "-")
     end
     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_motion_blur',options.PlotSmoothData,'.jpg'))
 end
-
-% SLICEWISE SHOULD BE DEMEANED FOR GLM
-% figure; subplot(211)
-% hold on
-% for i=1:size(heatmap,1)
-%     plot(slicewise_moco_params_X(i,:),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
-% end
-% plot(mean(slicewise_moco_params_X),'c','LineWidth',2)
-% hold off
-% 
-% subplot(212) 
-% hold on
-% for i=1:size(heatmap,1)
-%     plot(slicewise_moco_params_X(i,:),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
-% end
-% plot(motion(:,1),'c','LineWidth',2) % THIS TRACE IS DEMEANED
-% hold off
-
 %% DVARS plotting (and FD?)
 dvars=load('dvars.txt');
 dvars(1)=NaN;
@@ -924,6 +1003,7 @@ figure('Name','DVARS', 'Renderer', 'painters','Position', [50 1000 630 500])
 subplot(311)
 plot(1:n,dvars,'b','LineWidth',1.5); xlim([0 length(dvars)]); ylim([0 max(dvars)])
 ylabel('DVARS','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+set(gca,'XTickLabel',[],'xtick',[])
 subplot(3,1,[2,3])
 imagesc(heatmap)
 set(gca,'YTickLabel',[]); pbaspect([2 1 1])
@@ -933,13 +1013,13 @@ if (bySlice==1) && (useLevels==1)
     subplot('Position',[0.11 0.124 0.019 0.488])
     imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
     caxis([0 max(vertebralLevels(:,1))]); 
-    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[],'FontSize',12)
 elseif bySlice==0
     % Plot tissue next to heatmap [x0 y0 width height]
     subplot('Position',[0.11 0.124 0.019 0.488])
     imagesc(tissueColorbar); colormap(gca,greengrayMap)
     caxis([0 max(tissueColorbar(:,1))]);
-    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[],'FontSize',12)
 end
 %% Write out files if requested saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
 if write_out==1
