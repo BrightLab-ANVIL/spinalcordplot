@@ -3,6 +3,10 @@
 % E.g., '~/Downloads/spinalcordplot-main/exampleData/heatmap_output'
 input_folder=
 
+% Confirm phys_loc and mLoc paths are correct
+phys_loc='~/Downloads/spinalcordplot-main/exampleData/phys';
+mLoc='~/Downloads/spinalcordplot-main/exampleData/motionTraces.txt';
+
 % Adjust this for tissue type / longitudinal level organization (1 or 0)
 bySlice=1;
 
@@ -15,10 +19,7 @@ write_out=0;
 
 % Don't edit between lines ------------------------------------------------
 TR=2;
-% phys_prefix='sub-example';
 prefix='sub-example';
-phys_loc='~/Downloads/spinalcordplot-main/exampleData/phys';
-mLoc='~/Downloads/spinalcordplot-main/exampleData/motionTraces.txt';
 % -------------------------------------------------------------------------
 %% Run this section to visualize just the heatmap
 [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,[],"basic",1);
@@ -40,10 +41,10 @@ c=0.1;
 % not in the default organization. Example data is provided in the default
 % organization.
 mLabel=["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"];
-[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"mocoLoc",mLoc,"mocoLabel",mLabel);
+[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"moco",mLoc,"mocoLabel",mLabel);
 
 %% Run this section to run / visualize a simple GLM
-[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"mocoLoc",mLoc,"GLMtask",["CO2" "HR"]);
+[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"moco",mLoc,"GLMtask",["CO2" "HR"]);
 
 %% Run this section to plot smoothed data
 [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"PlotSmoothData",1);
