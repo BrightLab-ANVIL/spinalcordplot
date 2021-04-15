@@ -18,8 +18,8 @@ There are two scripts used to create the heatmaps. The bash shell script `x.heat
 
 
 *Notes*:
-- This code has only been tested on a computer running MacOS Catalina, MATLAB 2019b.
+- Latest testing on Mac running MacOS Catalina, MATLAB 2019b, SCT 5.2.0, AFNI 21.1.01, FSL 6.0.
 - Using an external monitor might alter some of the output figure aspect ratios.
 - Using bash vs. zsh shells may cause terminal messages with color to appear just as text. This is a minor bug. Program will still run.
 
-*README last updated: 03/18/2021*
+*README last updated: 04/14/2021*
