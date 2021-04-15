@@ -29,15 +29,12 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 %                                                 1x2 string array (default: ["CO2" "HR"])
 % "GLMtask", ["Task" "HR"] ---------------------> indicate that you would like to perform a GLM and 
 %                                                 identify two traces to be used as GLM regressors
-% "basic", 1 -----------------------------------> ONLY output basic plot without traces (default: 0)
-% "stim", "/path/file.txt" ---------------------> Add stimulus timings to plot of first trace 
-% "demean", 1 ------------WIP----------------------> Show demeaned traces with plots (default: 0)
-%                    sf?????             
-% To delete::::
-% "mocoLoc", "/path/file.txt" ------------------> OPTIONAL: full path to 6DOF motion traces file
-%                                                           (or 2DOF: X & Y summary)
-% "GLMmoco", ["/path/mocoX.txt" "/path/mocoY.txt"] -> Array with paths to SCT moco output slicewise files
-% :::
+% "plots", 1 -----------------------------------> 0: output no plots; 1: output basic plot only; 
+%                                                 2: output all available plots (default)
+% "stim", "/path/file.txt" ---------------------> Add binary stimulus timings to plot of first trace 
+% "slices", [1 10] -----------------------------> Limit slices to include in output heatmap (inclusive)
+%                                                 default excludes top & bottom slices
+%            
 %
 % Example using name-value pair arguments (assuming minimum arguments as ...)
 % SCheatmap(..., "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"], "PlotSmoothData", 1, "GLMtask", ["CO2" "HR"])
@@ -73,11 +70,11 @@ arguments
     options.PlotSmoothData (1,1) {mustBeMember(options.PlotSmoothData,[0,1])} = 0
     options.Traces (1,2) string = ["CO2" "HR"] %{mustBeMember(options.Traces,["CO2","HR","O2","RVT"])}
     options.GLMtask (1,2) string = ["-" "-"] %{mustBeMember(options.GLMtask,["CO2","HR","O2","RVT","-"])} = ["-" "-"]
-    options.basic (1,1) {mustBeMember(options.basic,[0,1])} = 0
-    options.demean (1,1) {mustBeMember(options.demean,[0,1])} = 0
+    options.plots (1,1) {mustBeMember(options.plots,[0,1,2])} = 2
     options.stim (1,1) string = "-"
+    options.slices (1,2) double {mustBeNumeric,mustBeInteger} = [-1 -1]
 end
-close all
+% close all
 addpath(input_folder)
 addpath(phys_loc)
 fprintf('\nBeginning... \n \n')
@@ -132,6 +129,11 @@ if bySlice==0
     nRow=0;
     for i=1:size(maskts,2)
         nRow=nRow+size(maskts{i},2); % Set vertical axis dim
+        % NEW: to make within each tissue mask sorted from top to bottom
+        temp_maskts=maskts{i}';
+        temp_maskts=sortrows(temp_maskts,[3 1],'descend');
+        maskts{i}=temp_maskts';
+        % % % % % % % % % % % % % % % % % % % % 
     end
     heatmap=zeros(nRow,nCol);
     voxelDir=zeros(nRow,3); % Directory of voxels to locate in 'heatmap' (x,y,z)
@@ -145,7 +147,6 @@ if bySlice==0
             voxelDir(row,:)=current_ts(1:3,j); % Save voxel coord info to the directory
             heatmap(row,:)=current_ts(4:end,j); % Save timeseries to plot
             mean_ts(row)=mean(current_ts(4:end,j)); % Save means for spatial normalization
-
         end
     end
 end
@@ -214,6 +215,31 @@ if bySlice==1
         mean_ts(i)=mean(heatmap(i,:));
     end
 end
+%% Limit slices to include in heatmap ----- new, 04/14/21
+if useLevels==1
+    % Set for vertebral level colorbar prior to deleting rows to correctly
+    % correspond with output maps of vertebral level masks
+    maxLevel=max(voxelDir(:,4));
+end
+if all(options.slices >= 0)
+    bottomSlice=options.slices(1);
+    topSlice=options.slices(2);
+    idxs=[];
+    for v=1:size(voxelDir,1)
+        if (voxelDir(v,3)>topSlice) || (voxelDir(v,3)<bottomSlice)
+            idxs=[idxs v];
+        end
+        
+    end
+    voxelDir(idxs,:)=[];
+    heatmap(idxs,:)=[];
+    nRow=size(voxelDir,1);
+    % Recalculate mean timeseries of each voxel after deletions
+    mean_ts=zeros(nRow,1);
+    for i=1:size(heatmap,1)
+        mean_ts(i)=mean(heatmap(i,:));
+    end
+end
 %% Demean and normalize heatmap
 heatmap_preNorm=heatmap;
 heatmap=zeros(size(heatmap_preNorm));
@@ -242,7 +268,7 @@ blueLightBlueMap = [zeros(256,1), linspace(0,1,256)', ones(256,1)]; % from FSL
 %% Define caxis bounds for heatmap (user input or default 0.4)
 c1=-options.cBound; c2=options.cBound;
 %% Plot basic plot then exit function
-if (options.basic==1) && (bySlice==0)
+if (options.plots==1) && (bySlice==0)
     figure('Name','Basic Plot: By Tissue','Renderer', 'painters', 'Position', [50 1000 887 538])
     imagesc(heatmap)
     set(gca,'YTickLabel',[]); set(gca,'FontSize',20); pbaspect([2 1 1])
@@ -263,6 +289,9 @@ if (options.basic==1) && (bySlice==0)
     for t=1:size(tissueTypes,1)
         tissueColorbar(tissueTypes(t,2):tissueTypes(t,3))=tissueTypes(t,1);
     end
+    if all(options.slices >= 0)
+        tissueColorbar(idxs,:)=[];
+    end
     % Plot tissue next to heatmap [x0 y0 width height]
     subplot('Position',[0.11 0.197 0.019 0.64])
     imagesc(tissueColorbar); colormap(gca,greengrayMap)
@@ -271,7 +300,7 @@ if (options.basic==1) && (bySlice==0)
     freqmap=0;
     fprintf('\nPlotted basic plot... done!\n')
     return
-elseif (options.basic==1) && (bySlice==1)
+elseif (options.plots==1) && (bySlice==1)
     figure('Name','Basic Plot: By Slice','Renderer', 'painters', 'Position', [50 1000 887 538])
     imagesc(heatmap)
     set(gca,'YTickLabel',[]); pbaspect([2 1 1])
@@ -299,11 +328,10 @@ elseif (options.basic==1) && (bySlice==1)
         % Plot vertebral level next to heatmap
         subplot('Position',[0.11 0.197 0.019 0.64])
         imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
-        caxis([0 max(vertebralLevels(:,1))]); 
+        caxis([0 maxLevel]); maxLevel
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
         freqmap=0;
     end
-    
     fprintf('\nPlotted basic plot... done!\n')
     return
 end
@@ -385,8 +413,10 @@ if options.stim ~= "-"
     if ~isequal(length(stim), size(heatmap,2))
         error('Length of stimulus timing vector does not match number of TRs (%d).', size(heatmap,2))
     end
+    stim_percent=0.1; % Percent of y-axis for stimulus vector to fill
+    stim_gray=[150/255 150/255 150/255];
 end
-%% Load and organize slicewise motion correction parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Load and organize slicewise motion correction parameters 
 if all(options.moco ~= "-") && (length(options.moco) == 2)
     mocoX=load(options.moco(1));
     mocoY=load(options.moco(2));
@@ -404,12 +434,12 @@ if all(options.moco ~= "-") && (length(options.moco) == 2)
     end
 end
 %% Plot data ordered by tissue
-if bySlice==0
+if (bySlice==0) && (options.plots==2)
     gmEnds=size(maskts{size(maskts,2)},2); % Size of GM graph portion
     figure('Name','By Tissue','Renderer', 'painters', 'Position', [50 1000 630 700])
     subplot(4,1,[3,4])
     imagesc(heatmap)
-    set(gca,'YTickLabel',[]); pbaspect([2 1 1])
+    set(gca,'YTickLabel',[],'FontSize',12); pbaspect([2 1 1])
     xlabel('{\bfTRs}')
     colormap gray
     caxis([c1 c2])
@@ -419,15 +449,21 @@ if bySlice==0
     subplot(411); hold on
     plot(phys.(options.Traces(1)),'c','LineWidth',1.5); xlim([0 length(phys.(options.Traces(1)))])
     if options.stim ~= "-"
-        ybound=ylim; stim_vec=stim+ybound(1);
-        plot(stim_vec,'LineWidth',2,'Color',[195/255 196/255 192/255])
+        ybound=ylim; 
+        stim_height=range(ylim)*stim_percent; % Define height of binary stim vector to be 10% of y range
+        plot(stim*stim_height+ybound(1),'LineWidth',2,'Color',stim_gray)
     end
     ylabel(label.(options.Traces(1)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
     set(gca,'XTickLabel',[],'FontSize',12); hold off
-    subplot(412)
+    subplot(412); hold on
     plot(phys.(options.Traces(2)),'g','LineWidth',1.5); xlim([0 length(phys.(options.Traces(1)))])
+    if options.stim ~= "-"
+        ybound=ylim;
+        stim_height=range(ylim)*stim_percent; % Define height of binary stim vector to be 10% of y range
+        plot(stim*stim_height+ybound(1),'LineWidth',2,'Color',stim_gray)
+    end
     ylabel(label.(options.Traces(2)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
-    set(gca,'XTickLabel',[],'FontSize',12)
+    set(gca,'XTickLabel',[],'FontSize',12); hold off
     tissueTypes=ones(size(maskts,2),3);
     tissueTypes(:,1)=size(maskts,2):-1:1;
     idx=1;
@@ -441,17 +477,20 @@ if bySlice==0
     for t=1:size(tissueTypes,1)
         tissueColorbar(tissueTypes(t,2):tissueTypes(t,3))=tissueTypes(t,1);
     end
+    if all(options.slices >= 0)
+        tissueColorbar(idxs,:)=[];
+    end
     % Plot tissue next to heatmap [x0 y0 width height]
     subplot('Position',[0.11 0.125 0.019 0.348])
     imagesc(tissueColorbar); colormap(gca,greengrayMap)
     caxis([0 max(tissueColorbar(:,1))]);
     set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
-%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
-    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue_blur',options.PlotSmoothData,'.jpg')) % This is causing the input warning
+    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
+%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue_blur',options.PlotSmoothData,'.jpg')) % This is causing the input warning
 end
 
 %% Plot data ordered by slice (and vertebral level if opted for)
-if bySlice==1
+if bySlice==1 && (options.plots==2)
     figure('Name','By Slice','Renderer', 'painters', 'Position', [50 1000 630 700])
     subplot(4,1,[3,4])
     imagesc(heatmap)
@@ -464,15 +503,21 @@ if bySlice==1
     subplot(411); hold on
     plot(phys.(options.Traces(1)),'c','LineWidth',1.5); xlim([0 length(phys.(options.Traces(1)))])
     if options.stim ~= "-"
-        ybound=ylim; stim_vec=stim+ybound(1);
-        plot(stim_vec,'LineWidth',2,'Color',[195/255 196/255 192/255])
+        ybound=ylim; 
+        stim_height=range(ylim)*stim_percent; % Define height of binary stim vector to be 10% of y range
+        plot(stim*stim_height+ybound(1),'LineWidth',2,'Color',stim_gray)
     end
     ylabel(label.(options.Traces(1)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
     set(gca,'XTickLabel',[],'FontSize',12); hold off
-    subplot(412)
+    subplot(412); hold on
     plot(phys.(options.Traces(2)),'g','LineWidth',1.5); xlim([0 length(phys.(options.Traces(1)))])
+    if options.stim ~= "-"
+        ybound=ylim; 
+        stim_height=range(ylim)*stim_percent; % Define height of binary stim vector to be 10% of y range
+        plot(stim*stim_height+ybound(1),'LineWidth',2,'Color',stim_gray)
+    end
     ylabel(label.(options.Traces(2)),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right')
-    set(gca,'XTickLabel',[],'FontSize',12)
+    set(gca,'XTickLabel',[],'FontSize',12); hold off
     if useLevels==1
         % Add small indicators of where the vertebral levels are
         levChange=(min(voxelDir(:,4)):max(voxelDir(:,4))-1); l=1;
@@ -501,11 +546,11 @@ if bySlice==1
         % Plot vertebral level next to heatmap
         subplot('Position',[0.11 0.125 0.019 0.348])
         imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
-        caxis([0 max(vertebralLevels(:,1))]); 
+        caxis([0 maxLevel]) 
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     end
-%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice.jpg'))
-    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice_blur',string(options.PlotSmoothData),'.jpg'))
+    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice.jpg'))
+%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice_blur',string(options.PlotSmoothData),'.jpg'))
 end
 
 %% PHASE / FREQUENCY / POWER
@@ -535,63 +580,65 @@ end
 % REMOVING ZERO FREQ., (for ease of visualization) %
 powershiftPlot(:,136)=0; phys_powershift(136,:)=0; 
 powerPlot(:,1)=0; phys_power(1,:)=0;
-% Plot carpetplot frequency
-figure('Name','Power','Renderer', 'painters', 'Position', [50 1000 630 700])
-subplot(4,1,[3,4])
-imagesc(powerPlot(:,1:round(n/2))); set(gca,'xtick',[]); colormap pink
-freqmap=powerPlot(:,1:round(n/2)); % For function output
-% %%%%
-% size(powerPlot) 205 long
-% size(phys_power) 205 long
-% freq is 0 to .5 and is 205 long (#TRs)
-% %%%%
-caxis([0 0.25]); 
-set(gca,'YTickLabel',[]); pbaspect([2 1 1])
-% % if bySlice==1
-% %     ylabel('\leftarrow Inferior                 Superior \rightarrow')
-% % elseif bySlice==0
-% %     ylabel('\leftarrow Outer/WM                 Inner/GM \rightarrow')
-% % end
-if bySlice==1
-    % Add small indicators of where the vertebral levels are
-    if useLevels==1
-        levChange=(min(voxelDir(:,4)):max(voxelDir(:,4))-1); l=1;
-        levChange=[levChange' zeros(1,range(voxelDir(:,4)))'];
-        for i=2:length(voxelDir)
-            if voxelDir(i-1,4)~=voxelDir(i,4)
-                levChange(l,2)=i;
-                l=l+1;
-            end
-        end
-        subplot(4,1,[3,4])
-%         for level=levChange(:,2)
-%             line([nCol/2-5 nCol/2], [level-0.5 level-0.5], 'Color','white')
-%         end
-    end
-    if useLevels==1
-        % Plot vertebral level next to heatmap
-        subplot('Position',[0.11 0.125 0.019 0.348])
-        imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
-        caxis([0 max(vertebralLevels(:,1))]); 
-    end
-    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
-elseif bySlice==0
-    % Plot tissue next to heatmap [x0 y0 width height]
-    subplot('Position',[0.11 0.125 0.019 0.348])
-    imagesc(tissueColorbar); colormap(gca,greengrayMap)
-    caxis([0 max(tissueColorbar(:,1))]);
-    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
-end
-% Add physio to plot
-subplot(411)
-plot(freq,phys_power(:,1),'c','LineWidth',1.5)
-title((options.Traces(1)))
-xlim([0 nyquist]) % limit plot by Nyquist frequency
-subplot(412)
-plot(freq,phys_power(:,2),'g','LineWidth',1.5)
-title((options.Traces(2)))
-xlim([0 nyquist])
+if (options.plots==2)
+    % Plot carpetplot frequency
+    figure('Name','Power','Renderer', 'painters', 'Position', [50 1000 630 700])
+    subplot(4,1,[3,4])
+    imagesc(powerPlot(:,1:round(n/2))); set(gca,'xtick',[]); colormap pink
 
+    % %%%%
+    % size(powerPlot) 205 long
+    % size(phys_power) 205 long
+    % freq is 0 to .5 and is 205 long (#TRs)
+    % %%%%
+    caxis([0 0.25]); 
+    set(gca,'YTickLabel',[]); pbaspect([2 1 1])
+    % % if bySlice==1
+    % %     ylabel('\leftarrow Inferior                 Superior \rightarrow')
+    % % elseif bySlice==0
+    % %     ylabel('\leftarrow Outer/WM                 Inner/GM \rightarrow')
+    % % end
+    if bySlice==1
+        % Add small indicators of where the vertebral levels are
+        if useLevels==1
+            levChange=(min(voxelDir(:,4)):max(voxelDir(:,4))-1); l=1;
+            levChange=[levChange' zeros(1,range(voxelDir(:,4)))'];
+            for i=2:length(voxelDir)
+                if voxelDir(i-1,4)~=voxelDir(i,4)
+                    levChange(l,2)=i;
+                    l=l+1;
+                end
+            end
+            subplot(4,1,[3,4])
+    %         for level=levChange(:,2)
+    %             line([nCol/2-5 nCol/2], [level-0.5 level-0.5], 'Color','white')
+    %         end
+        end
+        if useLevels==1
+            % Plot vertebral level next to heatmap
+            subplot('Position',[0.11 0.125 0.019 0.348])
+            imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
+            caxis([0 maxLevel]) 
+        end
+        set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+    elseif bySlice==0
+        % Plot tissue next to heatmap [x0 y0 width height]
+        subplot('Position',[0.11 0.125 0.019 0.348])
+        imagesc(tissueColorbar); colormap(gca,greengrayMap)
+        caxis([0 max(tissueColorbar(:,1))]);
+        set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
+    end
+    % Add physio to plot
+    subplot(411)
+    plot(freq,phys_power(:,1),'c','LineWidth',1.5)
+    title((options.Traces(1)))
+    xlim([0 nyquist]) % limit plot by Nyquist frequency
+    subplot(412)
+    plot(freq,phys_power(:,2),'g','LineWidth',1.5)
+    title((options.Traces(2)))
+    xlim([0 nyquist])
+end
+freqmap=powerPlot(:,1:round(n/2)); % For function output
 %% Run GLM
 if (all(options.moco ~= "-")) && (all(options.GLMtask ~= "-"))
     if (all(options.moco ~= "-")) && (length(options.moco) == 2)
@@ -665,7 +712,7 @@ else
     tstats=[];
 end
 %% Motion, phys, GLM plot
-if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
+if all(options.moco ~= "-") && (all(options.GLMtask ~= "-")) && (options.plots==2)
     % Define colormaps
     greenMap = [zeros(256,1), linspace(0,1,256)', zeros(256,1)];
     cyanMap = [zeros(256,1), linspace(0,1,256)', linspace(0,1,256)'];
@@ -684,15 +731,21 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     subplot('Position',[left heatmap_bot+heatmap_h+0.12 heatmap_w phys_h]); hold on
     plot(physconv.(options.GLMtask(1)),'c','LineWidth',1.5); xlim([0 length(physconv.(options.GLMtask(1)))])
     if options.stim ~= "-"
-        ybound=ylim; stim_vec=stim+ybound(1);
-        plot(stim_vec,'LineWidth',2,'Color',[195/255 196/255 192/255])
+        ybound=ylim; 
+        stim_height=range(ylim)*stim_percent; % Define height of binary stim vector to be 10% of y range
+        plot(stim*stim_height+ybound(1),'LineWidth',2,'Color',stim_gray)
     end
     xlim([0 length(physconv.(options.GLMtask(2)))]); set(gca,'xtick',[],'FontSize',12)
     ylabel(options.GLMtask(1),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold'); hold off
-    subplot('Position',[left heatmap_bot+heatmap_h+0.02 heatmap_w phys_h])
+    subplot('Position',[left heatmap_bot+heatmap_h+0.02 heatmap_w phys_h]); hold on
     plot(physconv.(options.GLMtask(2)),'g','LineWidth',1.5); xlim([0 length(physconv.(options.GLMtask(2)))])
+    if options.stim ~= "-"
+        ybound=ylim; 
+        stim_height=range(ylim)*stim_percent; % Define height of binary stim vector to be 10% of y range
+        plot(stim*stim_height+ybound(1),'LineWidth',2,'Color',stim_gray)
+    end
     xlim([0 length(physconv.(options.GLMtask(2)))]); set(gca,'xtick',[],'FontSize',12)
-    ylabel(options.GLMtask(2),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    ylabel(options.GLMtask(2),'rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold'); hold off
 %%% PLOT HEATMAP
     two_sd=2*std2(heatmap);
     subplot('Position', [left heatmap_bot heatmap_w heatmap_h])
@@ -717,7 +770,7 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
         % Plot vertebral level next to heatmap
         subplot('Position',[left-0.01 heatmap_bot 0.01 heatmap_h])
         imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
-        caxis([0 max(vertebralLevels(:,1))]); 
+        caxis([0 maxLevel]) 
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     elseif bySlice==0
         % Plot tissue type next to heatmap [x0 y0 width height]
@@ -730,21 +783,41 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     if all(options.moco ~= "-") && (length(options.moco) == 2)
         subplot('Position',[left heatmap_bot-0.1631 heatmap_w phys_h]); hold on % X motion
         for i=1:size(mocoX,2)
+            s=i-1; % Adjust slice # because of zero indexing
+            % Include motion traces of slices being plotted
+            if (s>topSlice) || (s<bottomSlice)
+                continue
+            end
             plot(mocoX(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
         plot(mean(mocoX(4:end,:),2),'LineWidth',1.5,'Color',[1 0.5686 0])
         if (abs(min(min(mocoX(4:end,:))))<1) && (abs(max(max(mocoX(4:end,:))))<1)
             ylim([-1 1])
         end
+        if options.stim ~= "-"
+            ybound=ylim; 
+            stim_height=range(ylim)*stim_percent; % Define height of binary stim vector to be 10% of y range
+            plot(stim*stim_height+ybound(1),'LineWidth',2,'Color',stim_gray)
+        end
         xlim([1 size(heatmap,2)]); set(gca,'FontSize',12,'XTickLabel',[],'xtick',[]);
         ylabel({'{\bfX Motion}','[mm]'},'rotation',90); hold off
         subplot('Position',[left heatmap_bot-0.2631 heatmap_w phys_h]); hold on % Y motion
         for i=1:size(mocoY,2)
+            s=i-1; % Adjust slice # because of zero indexing
+            % Include motion traces of slices being plotted
+            if (s>topSlice) || (s<bottomSlice)
+                continue
+            end
             plot(mocoY(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
         plot(mean(mocoY(4:end,:),2),'LineWidth',1.5,'Color',[1 0 0])
         if (abs(min(min(mocoY(4:end,:))))<1) && (abs(max(max(mocoY(4:end,:))))<1)
             ylim([-1 1])
+        end
+        if options.stim ~= "-"
+            ybound=ylim; 
+            stim_height=range(ylim)*stim_percent; % Define height of binary stim vector to be 10% of y range
+            plot(stim*stim_height+ybound(1),'LineWidth',2,'Color',stim_gray)
         end
         ylabel({'{\bfY Motion}','[mm]'},'rotation',90); xlim([1 size(heatmap,2)]); 
         set(gca,'FontSize',12,'XTickLabel',[],'xtick',[]); hold off
@@ -798,7 +871,7 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     end
 end
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(1)
-if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
+if all(options.moco ~= "-") && (all(options.GLMtask ~= "-")) && (options.plots==2)
     % GLMtstats(1) heatmap
     temp_sorter=[abs(tstats(:,1)) heatmap];
     heatmap_1_sort=sortrows(temp_sorter,1,'descend');
@@ -836,7 +909,7 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
     imagesc(abs(tstats_1_sort(:,2))); set(gca,'xtick',[],'ytick',[]); colormap(gca,greenMap); caxis([0 5]); title(options.GLMtask(2))
 end
 %% Reorganize data and plot by t-statistic magnitude - GLMtstats(2)
-if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
+if all(options.moco ~= "-") && (all(options.GLMtask ~= "-")) && (options.plots==2)
     % HR heatmap
     temp_sorter=[abs(tstats(:,2)) heatmap];
     heatmap_2_sort=sortrows(temp_sorter,1,'descend');
@@ -874,7 +947,7 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-"))
 end
 
 %% Motion trace plot
-if all(options.moco ~= "-")
+if all(options.moco ~= "-") && (options.plots==2)
     figure('Name','Motion','Renderer', 'painters', 'Position', [50 1000 683 700])
     subplot(4,1,[1,2])
     imagesc(heatmap); xlabel('{\bfTRs}');
@@ -884,6 +957,11 @@ if all(options.moco ~= "-")
         subplot(413) % Plot X
         hold on
         for i=1:size(mocoX,2)
+            s=i-1; % Adjust slice # because of zero indexing
+            % Include motion traces of slices being plotted
+            if (s>topSlice) || (s<bottomSlice)
+                continue
+            end
             plot(mocoX(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
         plot(mean(mocoX(4:end,:),2),'LineWidth',1.5,'Color',[1 0.5686 0])
@@ -895,6 +973,11 @@ if all(options.moco ~= "-")
         subplot(414) % Plot Y
         hold on
         for i=1:size(mocoY,2)
+            s=i-1; % Adjust slice # because of zero indexing
+            % Include motion traces of slices being plotted
+            if (s>topSlice) || (s<bottomSlice)
+                continue
+            end
             plot(mocoY(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
         plot(mean(mocoY(4:end,:),2),'LineWidth',1.5,'Color',[1 0 0])
@@ -949,7 +1032,7 @@ if all(options.moco ~= "-")
         % Plot vertebral level next to heatmap
         subplot('Position',[0.111 0.5482 0.019 0.3768])
         imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
-        caxis([0 max(vertebralLevels(:,1))]); 
+        caxis([0 maxLevel]) 
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     elseif bySlice==0
 %         if useLevels==1
@@ -965,30 +1048,32 @@ if all(options.moco ~= "-")
     end
     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_motion_blur',options.PlotSmoothData,'.jpg'))
 end
-%% DVARS plotting (and FD?)
-dvars=load('dvars.txt');
-dvars(1)=NaN;
-figure('Name','DVARS', 'Renderer', 'painters','Position', [50 1000 630 500])
-subplot(311)
-plot(1:n,dvars,'b','LineWidth',1.5); xlim([0 length(dvars)]); ylim([0 max(dvars)])
-ylabel('DVARS','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
-set(gca,'XTickLabel',[],'xtick',[])
-subplot(3,1,[2,3])
-imagesc(heatmap)
-set(gca,'YTickLabel',[]); pbaspect([2 1 1])
-xlabel('{\bfTRs}'); caxis([c1 c2]); colormap gray
-if (bySlice==1) && (useLevels==1)
-    % Plot vertebral level next to heatmap
-    subplot('Position',[0.11 0.124 0.019 0.488])
-    imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
-    caxis([0 max(vertebralLevels(:,1))]); 
-    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[],'FontSize',12)
-elseif bySlice==0
-    % Plot tissue next to heatmap [x0 y0 width height]
-    subplot('Position',[0.11 0.124 0.019 0.488])
-    imagesc(tissueColorbar); colormap(gca,greengrayMap)
-    caxis([0 max(tissueColorbar(:,1))]);
-    set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[],'FontSize',12)
+%% DVARS plot
+if (options.plots==2)
+    dvars=load('dvars.txt');
+    dvars(1)=NaN;
+    figure('Name','DVARS', 'Renderer', 'painters','Position', [50 1000 630 500])
+    subplot(311)
+    plot(1:n,dvars,'b','LineWidth',1.5); xlim([0 length(dvars)]); ylim([0 max(dvars)])
+    ylabel('DVARS','rotation',0,'VerticalAlignment','middle','HorizontalAlignment','right','FontWeight','bold')
+    set(gca,'XTickLabel',[],'xtick',[])
+    subplot(3,1,[2,3])
+    imagesc(heatmap)
+    set(gca,'YTickLabel',[]); pbaspect([2 1 1])
+    xlabel('{\bfTRs}'); caxis([c1 c2]); colormap gray
+    if (bySlice==1) && (useLevels==1)
+        % Plot vertebral level next to heatmap
+        subplot('Position',[0.11 0.124 0.019 0.488])
+        imagesc(vertebralColorbar); colormap(gca,blueLightBlueMap)
+        caxis([0 maxLevel]) 
+        set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[],'FontSize',12)
+    elseif bySlice==0
+        % Plot tissue next to heatmap [x0 y0 width height]
+        subplot('Position',[0.11 0.124 0.019 0.488])
+        imagesc(tissueColorbar); colormap(gca,greengrayMap)
+        caxis([0 max(tissueColorbar(:,1))]);
+        set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[],'FontSize',12)
+    end
 end
 %% Write out files if requested saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
 if write_out==1
