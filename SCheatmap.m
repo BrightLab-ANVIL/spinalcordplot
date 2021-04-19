@@ -1,22 +1,23 @@
-function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,options)
+function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc,options)
 % SCheatmap DESCRIPTION
 % Use masks created by the x.carpetPlots and produce the carpet plot
 % figures in time and frequency domains, plotted with regressors, and
 % alongside t-stats.
 % 
 % USAGE (minimum arguments)
-% SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc)
+% SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc)
 %
 % 
 % MANDATORY ARGUMENTS
-% input_folder ------->  full path to input folder (x.carpetPlots output folder)
+% input_folder ------->  full path to input folder (x.heatmapPrep output folder)
 % write_out----------->  1 or 0: 1 will write out files to current folder                        
-% bySlice ------------>  1 or 0: 1 will sort the carpetplot by slice, 0 will sort by tissue type
+% bySlice ------------>  1 or 0: 1 will sort the heatmap by slice, 0 will sort by tissue type
 % useLevels ---------->  1 or 0: 1 will indicate vertebral levels on plot, 0 will not. 
 %                        WARNING: only use this if CSF is not included in masks
 % TR ----------------->  TR in seconds
-% prefix ------------->  regressor/trace file prefix  -  e.g. 'sub-03_ses-BH'
-% phys_loc ----------->  full path to phys regressors folder
+% prefix ------------->  regressor/trace file prefix  -  e.g. 'sub-03'
+% trace_loc ---------->  full path to folder with physiological, task or other traces
+%                        required format: 'prefix_Trace' - e.g. sub-03_CO2.txt'
 %
 % OPTIONAL NAME-VALUE PAIR ARGUMENTS
 % "moco", "/path/file.txt" OR ["/path/mocoX.txt" "/path/mocoY.txt"] --> path or paths to motion data
@@ -63,7 +64,7 @@ arguments
     useLevels (1,1) {mustBeMember(useLevels,[0,1])}
     TR (1,1) {mustBeNumeric,mustBePositive}
     prefix (1,:) char
-    phys_loc (1,:) char
+    trace_loc (1,:) char
     options.moco (1,:) string = "-"
     options.mocoLabel (1,:) string = ["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"]
     options.cBound (1,1) double {mustBePositive} = 0.4
@@ -76,7 +77,7 @@ arguments
 end
 % close all
 addpath(input_folder)
-addpath(phys_loc)
+addpath(trace_loc)
 fprintf('\nBeginning... \n \n')
 %% Load data
 if options.PlotSmoothData==0
@@ -239,6 +240,9 @@ if all(options.slices >= 0)
     for i=1:size(heatmap,1)
         mean_ts(i)=mean(heatmap(i,:));
     end
+% else
+%     bottomSlice=max(voxelDir(:,3))-1; % Exclude bottom-most slice
+%     topSlice=min(voxelDir(:,3))+1; % Exclude top-most slice
 end
 %% Demean and normalize heatmap
 heatmap_preNorm=heatmap;
@@ -269,7 +273,7 @@ blueLightBlueMap = [zeros(256,1), linspace(0,1,256)', ones(256,1)]; % from FSL
 c1=-options.cBound; c2=options.cBound;
 %% Plot basic plot then exit function
 if (options.plots==1) && (bySlice==0)
-    figure('Name','Basic Plot: By Tissue','Renderer', 'painters', 'Position', [50 1000 887 538])
+    figure('Name','Basic Plot: By Tissue Type','Renderer', 'painters', 'Position', [50 1000 887 538])
     imagesc(heatmap)
     set(gca,'YTickLabel',[]); set(gca,'FontSize',20); pbaspect([2 1 1])
     xlabel('{\bfTRs}')
@@ -301,7 +305,7 @@ if (options.plots==1) && (bySlice==0)
     fprintf('\nPlotted basic plot... done!\n')
     return
 elseif (options.plots==1) && (bySlice==1)
-    figure('Name','Basic Plot: By Slice','Renderer', 'painters', 'Position', [50 1000 887 538])
+    figure('Name','Basic Plot: By Vertebral Level','Renderer', 'painters', 'Position', [50 1000 887 538])
     imagesc(heatmap)
     set(gca,'YTickLabel',[]); pbaspect([2 1 1])
     xlabel('{\bfTRs}'); set(gca,'FontSize',20)
@@ -335,17 +339,18 @@ elseif (options.plots==1) && (bySlice==1)
     fprintf('\nPlotted basic plot... done!\n')
     return
 end
-%% Load physiological and motion data
+%% Load physiological, motion, or trace data
 % Load convolved physiological regressors if user chooses GLMtask
 if all(options.GLMtask ~= "-")
     suffix.(options.GLMtask(1))='';
     suffix.(options.GLMtask(2))='';
 end
+% To do: increase robustness here for no available convolved regressors
 suffix.HR='_CRFconv';
 suffix.CO2='_HRFconv';
 suffix.RVT='_RRFconv';
 suffix.O2='_HRFconv';
-if options.GLMtask ~= "-"
+if all(options.GLMtask ~= "-")
     physconv.(options.GLMtask(1))=load(strcat(prefix,'_',options.GLMtask(1),suffix.(options.GLMtask(1)),'.txt'));
     physconv.(options.GLMtask(2))=load(strcat(prefix,'_',options.GLMtask(2),suffix.(options.GLMtask(2)),'.txt'));
     % Demean convolved physiological regressors
@@ -358,7 +363,7 @@ if options.GLMtask ~= "-"
     fprintf(strcat("Loading: ",prefix,"_",options.GLMtask(1),suffix.(options.GLMtask(1)),".txt",...
     " and ",prefix,"_",options.GLMtask(2),suffix.(options.GLMtask(2)),".txt\n"))
 end
-% Load nonconvolved physiological traces
+% Load nonconvolved traces
 phys.(options.Traces(1))=load(strcat(prefix,'_',options.Traces(1),'.txt'));
 phys.(options.Traces(2))=load(strcat(prefix,'_',options.Traces(2),'.txt'));
 % Loading statement
@@ -436,7 +441,7 @@ end
 %% Plot data ordered by tissue
 if (bySlice==0) && (options.plots==2)
     gmEnds=size(maskts{size(maskts,2)},2); % Size of GM graph portion
-    figure('Name','By Tissue','Renderer', 'painters', 'Position', [50 1000 630 700])
+    figure('Name','By Tissue Type','Renderer', 'painters', 'Position', [50 1000 630 700])
     subplot(4,1,[3,4])
     imagesc(heatmap)
     set(gca,'YTickLabel',[],'FontSize',12); pbaspect([2 1 1])
@@ -491,7 +496,7 @@ end
 
 %% Plot data ordered by slice (and vertebral level if opted for)
 if bySlice==1 && (options.plots==2)
-    figure('Name','By Slice','Renderer', 'painters', 'Position', [50 1000 630 700])
+    figure('Name','By Vertebral Level','Renderer', 'painters', 'Position', [50 1000 630 700])
     subplot(4,1,[3,4])
     imagesc(heatmap)
     set(gca,'YTickLabel',[]); pbaspect([2 1 1])
@@ -783,10 +788,12 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-")) && (options.plots==
     if all(options.moco ~= "-") && (length(options.moco) == 2)
         subplot('Position',[left heatmap_bot-0.1631 heatmap_w phys_h]); hold on % X motion
         for i=1:size(mocoX,2)
-            s=i-1; % Adjust slice # because of zero indexing
-            % Include motion traces of slices being plotted
-            if (s>topSlice) || (s<bottomSlice)
-                continue
+            if all(options.slices >= 0)
+                s=i-1; % Adjust slice # because of zero indexing
+                % Include motion traces of slices being plotted
+                if (s>topSlice) || (s<bottomSlice)
+                    continue
+                end
             end
             plot(mocoX(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
@@ -803,10 +810,12 @@ if all(options.moco ~= "-") && (all(options.GLMtask ~= "-")) && (options.plots==
         ylabel({'{\bfX Motion}','[mm]'},'rotation',90); hold off
         subplot('Position',[left heatmap_bot-0.2631 heatmap_w phys_h]); hold on % Y motion
         for i=1:size(mocoY,2)
-            s=i-1; % Adjust slice # because of zero indexing
-            % Include motion traces of slices being plotted
-            if (s>topSlice) || (s<bottomSlice)
-                continue
+            if all(options.slices >= 0)
+                s=i-1; % Adjust slice # because of zero indexing
+                % Include motion traces of slices being plotted
+                if (s>topSlice) || (s<bottomSlice)
+                    continue
+                end
             end
             plot(mocoY(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
@@ -957,10 +966,12 @@ if all(options.moco ~= "-") && (options.plots==2)
         subplot(413) % Plot X
         hold on
         for i=1:size(mocoX,2)
-            s=i-1; % Adjust slice # because of zero indexing
-            % Include motion traces of slices being plotted
-            if (s>topSlice) || (s<bottomSlice)
-                continue
+            if all(options.slices >= 0)
+                s=i-1; % Adjust slice # because of zero indexing
+                % Include motion traces of slices being plotted
+                if (s>topSlice) || (s<bottomSlice)
+                    continue
+                end
             end
             plot(mocoX(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
@@ -973,10 +984,12 @@ if all(options.moco ~= "-") && (options.plots==2)
         subplot(414) % Plot Y
         hold on
         for i=1:size(mocoY,2)
-            s=i-1; % Adjust slice # because of zero indexing
-            % Include motion traces of slices being plotted
-            if (s>topSlice) || (s<bottomSlice)
-                continue
+            if all(options.slices >= 0)
+                s=i-1; % Adjust slice # because of zero indexing
+                % Include motion traces of slices being plotted
+                if (s>topSlice) || (s<bottomSlice)
+                    continue
+                end
             end
             plot(mocoY(4:end,i),'LineWidth',0.25,'Color',[195/255 196/255 192/255])
         end
@@ -1091,6 +1104,6 @@ end
 fprintf(['\nFile(s) saved to: ' input_folder '\n'])
 %% Remove added paths
 rmpath(input_folder)
-rmpath(phys_loc)
+rmpath(trace_loc)
 
 fprintf('\n...done!\n')
