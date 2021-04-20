@@ -15,12 +15,21 @@ and vertebralLevels.txt. The vertebral levels can be used in the plot script to 
 indicate the levels.
 
 USAGE
-  zsh x.heatmapPrep -i ~/data/sub-01/label -f ~/data/sub-01/func.nii.gz -o heatmap_output
+  zsh x.heatmapPrep -i ~/data/sub-01/label -f ~/data/sub-01/func.nii.gz -o heatmap_output [-s] [-k x,y,z]
 
 MANDATORY ARGUMENTS
   -i <input folder>       full path to label folder (with PAM50 data from running SCT registration)
   -f <functional data>    full path to functiona data file (same file used for SCT registration)
   -o <output folder>      desired name of output folder
+
+OPTIONAL ARGUMENTS
+  -s                      smooth data using AFNI 3dblurinmask [Default: no smoothing]
+  -k <kernel>             define FWHM of isotropic or anisotropic smoothing kernel [Default: 2,2,6]
+                          E.g. anisotropic: -k 2,2,6 ; isotropic -k 3
+
+WIP (not yet implemented):
+  -mocoX <>   add motion correction nifti files output from SCT motion correction: fslmeants -i mocoX.nii.gz --showall > mocoX.txt
+  -mocoY <>
 
 EOF
 }
@@ -33,7 +42,9 @@ fi
 scriptname=${0}
 data_path=
 outputdir=
-while getopts ':hi:f:o:' OPTION; do
+smooth=0
+fwhm=2,2,6 #####default value , make this compatible
+while getopts ':hi:f:o:sk:' OPTION; do
   case $OPTION in
     h)
           usage
@@ -47,6 +58,13 @@ while getopts ':hi:f:o:' OPTION; do
           ;;
     o)
           output_folder=$OPTARG
+          ;;
+    s)
+          smooth=1
+          # echo "We will be smoothing"
+          ;;
+    k)
+          fwhm=${OPTARG}
           ;;
     ?)
           echo "\e[91mUnknown flag!! -$OPTARG\e[0m"
@@ -68,6 +86,43 @@ if [[ -z ${output_folder} ]]; then
 	 echo "ERROR: Output folder not specified. Exiting!\n"
      exit 1
 fi
+# Check for length of fwhm must be 5 (anisotropic) or 1 (isotropic)
+STRLENGTH=$(echo -n $fwhm | wc -m)
+if [[ ${STRLENGTH} -ne 1 && ${STRLENGTH} -ne 5 ]]; then
+  echo "ERROR: Smoothing kernel should either be comma separated for anisotropic\
+  (e.g. -k 2,2,6) or single value for isotropic (e.g. -k 3). Exiting!\n"
+    exit 1
+fi
+
+# If anisotropic smoothing is requested, check orientation for 3dblurinmask
+if [[ ${smooth} -eq 1 && ${STRLENGTH} -eq 5 ]]; then
+  func_orientation=`3dinfo -short -orient ${func}`
+  echo ""
+  echo "The allowed order of coordinates are (1) R-L or L-R, (2) A-P or P-A, (3) I-S or S-I"
+  echo "The orientation of the input functional data is: ${func_orientation}"
+  func_orientation="LAS"
+  if [[ ${func_orientation[@]:0:1} =~ ^(R|L)$ && ${func_orientation[@]:1:1} =~ ^(A|P)$ && ${func_orientation[@]:2:1} =~ ^(I|S)$ ]]; then
+      echo "This meets requirements for for anisotropic smoothing."
+      echo ""
+  else
+      echo "HERE"
+      echo -n "This does not meet requirements for for anisotropic smoothing.\
+Would you like to continue without smoothing? Enter y or n: "
+      read CONT
+      if [[ $CONT =~ ^([yY])$ ]]; then
+        smooth=0
+        echo "OK, will continue without smoothing!\n"
+      elif [[ $CONT =~ ^([nN])$ ]]; then
+        echo -e "\e[91mExiting!\e[0m\n"
+        exit 1
+      else
+        echo -e "\e[91mInput not recognized. Exiting!\e[0m\n"
+      fi
+  fi
+fi
+################################################################################
+# End of checks, beginning analysis
+################################################################################
 # Change directory to func folder and create output directory
 cd ${data_path}
 echo "\nLooking at functional data in... ${data_path} \n"
@@ -97,6 +152,7 @@ if [[ -f "${outputdir}/maskDescriptions.txt" ]]; then
 fi
 date > ${outputdir}/maskDescriptions.txt
 echo "Path to analyzed data: ${data_path}" >> ${outputdir}/maskDescriptions.txt
+echo "Path to functional data input: ${func}" >> ${outputdir}/maskDescriptions.txt
 echo "Path to output directory: ${outputdir}" >> ${outputdir}/maskDescriptions.txt
 echo "" >> ${outputdir}/maskDescriptions.txt
 # Output vertebral levels text file
@@ -114,6 +170,7 @@ wm=${outputdir}/full_wm_mask.nii.gz
 # OPTIONAL SECTION FOR CSF EROSION AND MASK CREATION:
 # Option is prompted in command window for user input. More detailed comments are
 # provided in the WM section below.
+###############################################################################
 o=0 #output
 i=0 #input
 m=0 #mask
@@ -177,6 +234,7 @@ else
 fi
 ###############################################################################
 # WM EROSION AND MASK CREATION:
+###############################################################################
 # Create first mask using full cord mask:
 # Erode voxel layer from outer edges
 sct_maths -i ${input} -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
@@ -226,6 +284,8 @@ do
   fslmeants -i ${func} -m ${mask} --showall > ${outputdir}/mask${m}ts.txt
   m=$(( m+1 ))
 done
+###############################################################################
+# Gray matter:
 ###############################################################################
 # No erosion needed for GM because it is quite small already
 m=$(( m-1 ))
@@ -279,25 +339,93 @@ fslmeants -i ${func} -m ${outputdir}/tracts/RFC_mask.nii.gz --showall > ${output
 fslmeants -i ${func} -m ${outputdir}/tracts/LFG_mask.nii.gz --showall > ${outputdir}/tracts/LFGts.txt
 fslmeants -i ${func} -m ${outputdir}/tracts/RFG_mask.nii.gz --showall > ${outputdir}/tracts/RFGts.txt
 ###############################################################################
-# # Smoothing (WIP)
-# Blur in cord mask:
-echo "\nDelete top and bottom slice in mask (for smoothing).\nOverwrite file when saving (PAM50_cord_forSmoothing.nii.gz).\n"
-cp ${input} template/PAM50_cord_forSmoothing.nii.gz
-blurMask=template/PAM50_cord_forSmoothing.nii.gz
-fsleyes ${blurMask}
-echo "\nBlurring func data in mask...\n"
-3dblurinmask -input ${func} -FWHM 2.9 -Mmask  ${blurMask} \
--prefix ${outputdir}/func_blur_cord.nii.gz -preserve -quiet
+# SMOOTHING USING AFNI 3dblurinmask
+###############################################################################
+# Use 3dinfo -orient to determine whether orientation is correct, then continue with aniso smoothing
+# If not, maybe switch to isotropic? Or spit out error
+# Needs to be RPI, or others which mean the same?
+if [[ ${smooth} -eq 1 ]]; then
+  echo "\nSmoothing was requested. Beginning smoothing... \n"
+  # Blur in cord mask (Find a way to automate this (maybe fslroi?)):
+  echo "\nDelete top and bottom slice in mask (for smoothing).\nOverwrite file when saving (PAM50_cord_forSmoothing.nii.gz).\n"
+  cp ${input} template/PAM50_cord_forSmoothing.nii.gz
+  blurMask=template/PAM50_cord_forSmoothing.nii.gz
+  fsleyes ${blurMask}
+  # Loop through -k input to retrive x,y,z FWHM kernel values
+  # MAKE THIS SO THAT IT ONLY GOES THROUGH THIS LOOP IF THE INPUT IS LENGH STRLENGTH=5
+  if [[ ${smooth} -eq 1 && ${STRLENGTH} -eq 5 ]]; then
+    # If anisotropic:
+    for i in $(echo $fwhm | sed "s/,/ /g")
+    do
+       args+=("$i")
+    done
+    # @ means all, 0 is offset, 1 is how many desired (accessible for bash & zsh)
+    FWHMx=${args[@]:0:1}
+    FWHMy=${args[@]:1:1}
+    FWHMz=${args[@]:2:1}
+    echo "FWHM split: X:${FWHMx}, Y:${FWHMy}, Z:${FWHMz}"
+    echo "\nBlurring func data in mask (anisotropic)...\n"
+    3dblurinmask -input ${func} -FWHMxyz ${FWHMx} ${FWHMy} ${FWHMz} -Mmask  ${blurMask} \
+    -prefix ${outputdir}/func_blur_cord.nii.gz -preserve -quiet
+    echo "Anisotropic smoothing complete."
+  elif [[ ${smooth} -eq 1 && ${STRLENGTH} -eq 1 ]]; then
+    # If isotropic:
+    FWHMxyz=${fwhm}
+    echo "FWHM: ${FWHMxyz}"
+    echo "\nBlurring func data in mask (isotropic)...\n"
+    3dblurinmask -input ${func} -FWHM ${FWHMxyz} -Mmask  ${blurMask} \
+    -prefix ${outputdir}/func_blur_cord.nii.gz -preserve -quiet
+    echo "Isotropic smoothing complete."
+  fi
+  # Calculate blurred timeseries for each mask (use for restricted or undrestricted methods)
+  m=0
+  for mask in ${outputdir}/mask*.nii.gz
+  do
+  	echo "Processing mask $m in func_blur_cord.nii.gz"
+    fslmeants -i ${outputdir}/func_blur_cord.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
+    m=$(( m+1 ))
+  done
+fi
 
-# Calculate blurred timeseries for each mask
-m=0
-for mask in ${outputdir}/mask*.nii.gz
-do
-	echo "Processing mask $m in func_blur_cord.nii.gz"
-  fslmeants -i ${outputdir}/func_blur_cord.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
-  m=$(( m+1 ))
-done
+# # Blur unrestricted (delete later):
+# 3dblurinmask -input ${func} -FWHM 2.9 \
+# -prefix ${outputdir}/func_blur.nii.gz -preserve -quiet
 
+# # Blur with SCT function (smooth is only supported at 3D)
+# # Make new folder for splitting the functional data
+# mkdir ${outputdir}/split
+# cd ${outputdir}/split
+# # Split data into volumes for smoothing
+# sct_image -i ${func} -split t -o func_vol.nii.gz
+# v=0
+# concatInput=
+# for FILE in *
+# do
+#   echo "Working on ${FILE}..."
+#   echo ${concatInput} #Delete this lline later
+#   # Get centerline of each 3D image and ouptut numbered volumes
+#   printf -v vol "%04d" ${v}
+#   sct_get_centerline -i ${FILE} -c t2s -o center_T${vol} -v 0
+#   # Make string for input to concatenation
+#   concatInput="${concatInput} func_vol_T${vol}_smooth.nii.gz" # NEED TO SWITCH THIS TO SMOOTHING files
+#   # Smooth each 3D image (SCT 5.2.0 has -o option)
+#   sct_smooth_spinalcord -i ${FILE} -s center_T${vol}.nii.gz -smooth 2,2,6 -v 0
+#   v=$(( v+1 ))
+# done
+#
+# # Concatenate 3D volumes to 4D timeseries (THIS STEP DOES NOT WORK)
+# sct_image -i ${value} -concat t -o func_SCTsmoothed.nii.gz
+# mv func_SCTsmoothed.nii.gz ${outputdir}
+# cd ${data_path}
+
+# # Calculate blurred timeseries for each mask (use for SCT method)
+# m=0
+# for mask in ${outputdir}/mask*.nii.gz
+# do
+# 	echo "Processing mask $m in func_SCTsmoothed.nii.gz"
+#   fslmeants -i ${outputdir}/func_SCTsmoothed.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
+#   m=$(( m+1 ))
+# done
 ###############################################################################
 echo ""
 echo -e "\e[1;35m... done! Runtime: $SECONDS seconds.\e[0m"

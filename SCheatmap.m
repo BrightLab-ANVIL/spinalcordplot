@@ -21,7 +21,8 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 %
 % OPTIONAL NAME-VALUE PAIR ARGUMENTS
 % "moco", "/path/file.txt" OR ["/path/mocoX.txt" "/path/mocoY.txt"] --> path or paths to motion data
-%                               %%%%%%add more****info                                                 
+%                                                 Either: path to one motion file (6DOF or X&Y) or 
+%                                                 two paths to X and Y slicewise motion
 % "mocoLabel", ["Tx" "Ty" "Tz" "Rx" "Ry" "Rz"] -> order of columns
 %
 % "cBound", 0.3 --------------------------------> caxis abs value of limit around zero (default: 0.4)
