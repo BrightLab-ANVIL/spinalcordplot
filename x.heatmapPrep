@@ -18,8 +18,9 @@ USAGE
   zsh x.heatmapPrep -i ~/data/sub-01/label -f ~/data/sub-01/func.nii.gz -o heatmap_output [-s] [-k x,y,z]
 
 MANDATORY ARGUMENTS
-  -i <input folder>       full path to label folder (with PAM50 data from running SCT registration)
-  -f <functional data>    full path to functiona data file (same file used for SCT registration)
+  -i <input folder>       full path to label folder - contains the PAM50 template
+                          warped to the functional space (from sct_warp_template)
+  -f <functional data>    full path to functional data file (same file used for SCT registration)
   -o <output folder>      desired name of output folder
 
 OPTIONAL ARGUMENTS
@@ -100,12 +101,10 @@ if [[ ${smooth} -eq 1 && ${STRLENGTH} -eq 5 ]]; then
   echo ""
   echo "The allowed order of coordinates are (1) R-L or L-R, (2) A-P or P-A, (3) I-S or S-I"
   echo "The orientation of the input functional data is: ${func_orientation}"
-  func_orientation="LAS"
   if [[ ${func_orientation[@]:0:1} =~ ^(R|L)$ && ${func_orientation[@]:1:1} =~ ^(A|P)$ && ${func_orientation[@]:2:1} =~ ^(I|S)$ ]]; then
       echo "This meets requirements for for anisotropic smoothing."
       echo ""
   else
-      echo "HERE"
       echo -n "This does not meet requirements for for anisotropic smoothing.\
 Would you like to continue without smoothing? Enter y or n: "
       read CONT
@@ -341,9 +340,6 @@ fslmeants -i ${func} -m ${outputdir}/tracts/RFG_mask.nii.gz --showall > ${output
 ###############################################################################
 # SMOOTHING USING AFNI 3dblurinmask
 ###############################################################################
-# Use 3dinfo -orient to determine whether orientation is correct, then continue with aniso smoothing
-# If not, maybe switch to isotropic? Or spit out error
-# Needs to be RPI, or others which mean the same?
 if [[ ${smooth} -eq 1 ]]; then
   echo "\nSmoothing was requested. Beginning smoothing... \n"
   # Blur in cord mask (Find a way to automate this (maybe fslroi?)):
