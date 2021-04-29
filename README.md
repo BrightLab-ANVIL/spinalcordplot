@@ -3,7 +3,9 @@ Repository containing preliminary code and example data to create heatmaps for t
 
 ---
 
-
+[![Twitter URL](https://img.shields.io/twitter/follow/KJHemm?style=social)](https://twitter.com/KJHemm)
+[![MIT License](https://img.shields.io/apm/l/atomic-design-ui.svg?)](https://github.com/BrightLab-ANVIL/spinalcordplot/blob/main/LICENSE)
+<br>
 
 #### Guide to this repository:
 There are two scripts used to create the heatmaps. The bash shell script `x.heatmapPrep` requires the Spinal Cord Toolbox, AFNI, and FSL to be installed on your machine. The second script, `SCheatmap.m` is a MATLAB script, and requires MATLAB to be installed.
