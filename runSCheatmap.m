@@ -2,10 +2,14 @@
 % Add the full path to your output folder from x.heatmapPrep as a string
 % E.g., '~/Downloads/spinalcordplot-main/exampleData/heatmap_output'
 input_folder=
+% Add the full path to the location of traces as a string
+% E.g., '~/Downloads/spinalcordplot-main/exampleData/traces'
+trace_loc=
 
-% Confirm phys_loc and mLoc paths are correct
-phys_loc='~/Downloads/spinalcordplot-main/exampleData/phys';
-mLoc='~/Downloads/spinalcordplot-main/exampleData/motionTraces.txt';
+
+% Paths to motion traces
+mocoX=strcat(trace_loc,"/sub-example_moco-X.txt");
+mocoY=strcat(trace_loc,"/sub-example_moco-Y.txt");
 
 % Adjust this for tissue type / longitudinal level organization (1 or 0)
 bySlice=1;
@@ -22,30 +26,27 @@ TR=2;
 prefix='sub-example';
 % -------------------------------------------------------------------------
 %% Run this section to visualize just the heatmap
-[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,[],"basic",1);
+[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,[],"plots",1);
 
 %% Run this section to visualize basic heatmap figures
-[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc);
+[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc);
 
 %% Run this section to visualize other physiological traces
 traces=["RVT" "O2"];
-[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"Traces",traces);
+[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc,"Traces",traces);
 
 %% Run this section to adjust heatmap contrast
 % Edit variable 'c' to adjust contrast (default: 0.4)
 c=0.1; 
-[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"cBound",c);
+[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc,"cBound",c);
 
 %% Run this section to also visualize motion data
-% Variable 'mLabel' used to change motion labels if input motion file is 
-% not in the default organization. Example data is provided in the default
-% organization.
-mLabel=["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"];
-[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"moco",mLoc,"mocoLabel",mLabel);
+[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc,"moco",[mocoX,mocoY]);
 
-%% Run this section to run / visualize a simple GLM
-[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"moco",mLoc,"GLMtask",["CO2" "HR"]);
+%% Run this section to run & visualize a simple GLM & stimulus vector
+stim=strcat(trace_loc,"/sub-example_stim.txt");
+[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc,"moco",[mocoX,mocoY],"GLMtask",["CO2" "HR"],"stim",stim);
 
 %% Run this section to plot smoothed data
-[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,phys_loc,"PlotSmoothData",1);
+[heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc,"PlotSmoothData",1);
 
