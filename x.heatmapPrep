@@ -24,13 +24,9 @@ MANDATORY ARGUMENTS
   -o <output folder>      desired name of output folder
 
 OPTIONAL ARGUMENTS
-  -s                      smooth data using AFNI 3dblurinmask [Default: no smoothing]
+  -s                      smooth data with mask of spinal cord using AFNI 3dblurinmask [Default: no smoothing]
   -k <kernel>             define FWHM of isotropic or anisotropic smoothing kernel [Default: 2,2,6]
                           E.g. anisotropic: -k 2,2,6 ; isotropic -k 3
-
-WIP (not yet implemented):
-  -mocoX <>   add motion correction nifti files output from SCT motion correction: fslmeants -i mocoX.nii.gz --showall > mocoX.txt
-  -mocoY <>
 
 EOF
 }
@@ -173,7 +169,7 @@ wm=${outputdir}/full_wm_mask.nii.gz
 o=0 #output
 i=0 #input
 m=0 #mask
-echo -n "GM/WM masks will be created. Do you want to include CSF? \e[42mEnter y or n:\e[0m "
+echo -n "Creating tissue type masks. GM/WM masks will be created. Do you want to include CSF? \e[42mEnter y or n:\e[0m "
 read YN
 if [[ $YN =~ ^([yY])$ ]]; then
   echo "\n OK, will create CSF masks..."
@@ -309,10 +305,6 @@ do
     cp ${outputdir}/temp.nii.gz ${outputdir}/allMaskVisualization.nii.gz
   fi
 done
-fsleyes func_mean.nii.gz ${outputdir}/allMaskVisualization.nii.gz -cm brain_colours_greengray &
-###############################################################################
-# Vertebral levels mask visualization
-fsleyes func_mean.nii.gz ${levels} -cm blue-lightblue &
 ###############################################################################
 # Calculate DVARS trace using PAM50_cord as the mask
 3dTto1D -input ${func} -mask ${input} -method dvars -prefix ${outputdir}/dvars.txt
@@ -422,6 +414,12 @@ fi
 #   fslmeants -i ${outputdir}/func_SCTsmoothed.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
 #   m=$(( m+1 ))
 # done
+###############################################################################
+# Tissue type mask visualization
+fsleyes func_mean.nii.gz ${outputdir}/allMaskVisualization.nii.gz -cm brain_colours_greengray &
+###############################################################################
+# Vertebral levels mask visualization
+fsleyes func_mean.nii.gz ${levels} -cm blue-lightblue &
 ###############################################################################
 echo ""
 echo -e "\e[1;35m... done! Runtime: $SECONDS seconds.\e[0m"
