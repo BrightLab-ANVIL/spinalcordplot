@@ -76,7 +76,7 @@ arguments
     options.stim (1,1) string = "-"
     options.slices (1,2) double {mustBeNumeric,mustBeInteger} = [-1 -1]
 end
-% close all
+close all
 addpath(input_folder)
 addpath(trace_loc)
 fprintf('\nBeginning... \n \n')
