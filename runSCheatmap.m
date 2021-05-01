@@ -41,10 +41,6 @@ c=0.1;
 [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc,"cBound",c);
 
 %% Run this section to also visualize motion data
-% Variable 'mLabel' used to change motion labels if input motion file is 
-% not in the default organization. Example data is provided in the default
-% organization.
-mLabel=["Rx" "Ry" "Rz" "Tx" "Ty" "Tz"];
 [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,useLevels,TR,prefix,trace_loc,"moco",[mocoX,mocoY]);
 
 %% Run this section to run & visualize a simple GLM & stimulus vector
