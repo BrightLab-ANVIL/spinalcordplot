@@ -491,7 +491,7 @@ if (bySlice==0) && (options.plots==2)
     imagesc(tissueColorbar); colormap(gca,greengrayMap)
     caxis([0 max(tissueColorbar(:,1))]);
     set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
-    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
+%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue.jpg'))
 %     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_byTissue_blur',options.PlotSmoothData,'.jpg')) % This is causing the input warning
 end
 
@@ -555,7 +555,7 @@ if bySlice==1 && (options.plots==2)
         caxis([0 maxLevel]) 
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     end
-    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice.jpg'))
+%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice.jpg'))
 %     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_bySlice_blur',string(options.PlotSmoothData),'.jpg'))
 end
 
@@ -1060,7 +1060,7 @@ if all(options.moco ~= "-") && (options.plots==2)
         caxis([0 max(tissueColorbar(:,1))]);
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
     end
-    saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_motion_blur',options.PlotSmoothData,'.jpg'))
+%     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_motion_blur',options.PlotSmoothData,'.jpg'))
 end
 %% DVARS plot
 if (options.plots==2)
