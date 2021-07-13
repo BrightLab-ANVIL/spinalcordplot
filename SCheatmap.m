@@ -245,11 +245,14 @@ if all(options.slices >= 0)
 %     bottomSlice=max(voxelDir(:,3))-1; % Exclude bottom-most slice
 %     topSlice=min(voxelDir(:,3))+1; % Exclude top-most slice
 end
-%% Demean and normalize heatmap
+%% Demean and standardize/normalize heatmap (mean normalization)
 heatmap_preNorm=heatmap;
 heatmap=zeros(size(heatmap_preNorm));
 for r=1:nRow
-    heatmap(r,:)=(heatmap_preNorm(r,:)-mean_ts(r))./range(mean_ts);
+%     heatmap(r,:)=(heatmap_preNorm(r,:)-mean_ts(r))./range(mean_ts);
+% Realized that I may have been dividing by the range of the means of the
+% ts... which doesn't make sense. Changing to dividing by range of each ts
+    heatmap(r,:)=(heatmap_preNorm(r,:)-mean_ts(r))./range(heatmap_preNorm(r,:));
 end
 %% Define colormaps
 % Tissue colormap:
