@@ -1,4 +1,4 @@
-## Spinal Cord fMRI heatmaps
+## SpinalCordPlot: Spinal Cord fMRI heatmaps
 Repository containing preliminary code and example data to create heatmaps for the spinal cord.
 
 ---
