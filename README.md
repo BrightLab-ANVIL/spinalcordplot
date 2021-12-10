@@ -24,4 +24,5 @@ There are two scripts used to create the heatmaps. The bash shell script `x.heat
 - Using an external monitor might alter some of the output figure aspect ratios.
 - Using bash vs. zsh shells may cause terminal messages with color to appear just as text. This is a minor bug. Program will still run.
 
-*README last updated: 05/01/2021*
+*Citation*:
+K. J. Hemmerling and M. G. Bright, "A visualization tool for assessment of spinal cord functional magnetic resonance imaging data quality," 2021 43rd Annual International Conference of the IEEE Engineering in Medicine & Biology Society (EMBC), 2021, pp. 3391-3394, doi: 10.1109/EMBC46164.2021.9630903.
