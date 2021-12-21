@@ -173,11 +173,13 @@ echo -n "Creating tissue type masks. GM/WM masks will be created. Do you want to
 read YN
 if [[ $YN =~ ^([yY])$ ]]; then
   echo "\n OK, will create CSF masks..."
-  echo -e "\e[1;35m    Edit CSF mask. Fill in full space inside CSF \e[0m"
+  echo -e "\e[1;35m    Edit CSF mask. Fill in top/bottom slices inside CSF \e[0m"
   echo -e "\e[1;35m    Save to same file name. Close window when done. \n \e[0m"
   cp ${outputdir}/full_csf_mask.nii.gz ${outputdir}/csfAndCord_mask.nii.gz
   csfCord=${outputdir}/csfAndCord_mask.nii.gz
   fsleyes ${outputdir}/csfAndCord_mask.nii.gz -cm red-yellow
+  fslmaths ${outputdir}/csfAndCord_mask.nii.gz -fillh ${outputdir}/csfAndCord_mask.nii.gz
+  fsleyes ${outputdir}/csfAndCord_mask.nii.gz -cm red-yellow &
   # After this, ${csfCord} is really csf+gm+wm
   # Erode and make masks (descriptions for each of these steps in WM section)
   # Use cord for subtraction (input)
