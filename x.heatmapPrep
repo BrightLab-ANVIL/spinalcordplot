@@ -27,6 +27,7 @@ OPTIONAL ARGUMENTS
   -s                      smooth data with mask of spinal cord using AFNI 3dblurinmask [Default: no smoothing]
   -k <kernel>             define FWHM of isotropic or anisotropic smoothing kernel [Default: 2,2,6]
                           E.g. anisotropic: -k 2,2,6 ; isotropic -k 3
+  -c {0,1}                include CSF masks (doesn't work with vertebral levels) [Default: ask user]
 
 EOF
 }
@@ -40,8 +41,9 @@ scriptname=${0}
 data_path=
 outputdir=
 smooth=0
+include_CSF=2
 fwhm=2,2,6 #####default value , make this compatible
-while getopts ':hi:f:o:sk:' OPTION; do
+while getopts ':hi:f:o:sk:c:' OPTION; do
   case $OPTION in
     h)
           usage
@@ -62,6 +64,9 @@ while getopts ':hi:f:o:sk:' OPTION; do
           ;;
     k)
           fwhm=${OPTARG}
+          ;;
+    c)
+          include_CSF=${OPTARG}
           ;;
     ?)
           echo "\e[91mUnknown flag!! -$OPTARG\e[0m"
@@ -169,9 +174,20 @@ wm=${outputdir}/full_wm_mask.nii.gz
 o=0 #output
 i=0 #input
 m=0 #mask
-echo -n "Creating tissue type masks. GM/WM masks will be created. Do you want to include CSF? \e[42mEnter y or n:\e[0m "
-read YN
-if [[ $YN =~ ^([yY])$ ]]; then
+if [[ ${include_CSF} -eq 2 ]]; then
+    echo -n "Creating tissue type masks. GM/WM masks will be created. Do you want to include CSF? \e[42mEnter y or n:\e[0m "
+    read YN
+    if [[ $YN =~ ^([yY])$ ]]; then
+      include_CSF=1
+    elif [[ $YN =~ ^([nN])$ ]]; then
+      include_CSF=0
+      echo "\n OK, no CSF. \n"
+    else
+      echo -e "\e[91mInput not recognized. Exiting!\e[0m\n"
+      exit 1
+    fi
+fi
+if [[ ${include_CSF} -eq 1 ]]; then
   echo "\n OK, will create CSF masks..."
   echo -e "\e[1;35m    Edit CSF mask. Fill in top/bottom slices inside CSF \e[0m"
   echo -e "\e[1;35m    Save to same file name. Close window when done. \n \e[0m"
@@ -223,12 +239,10 @@ if [[ $YN =~ ^([yY])$ ]]; then
   fslmaths ${outputdir}/temp_csf_mask2.nii.gz -thr 0 -bin ${outputdir}/full_csf_mask.nii.gz
   rm ${outputdir}/temp_csf_mask1.nii.gz ${outputdir}/temp_csf_mask2.nii.gz
   csf=${outputdir}/full_csf_mask.nii.gz
-elif [[ $YN =~ ^([nN])$ ]]; then
+elif [[ include_CSF -eq 0 ]]; then
   echo "\n OK, no CSF. \n"
-else
-  echo -e "\e[91mInput not recognized. Exiting!\e[0m\n"
-  exit 1
 fi
+exit 1
 ###############################################################################
 # WM EROSION AND MASK CREATION:
 ###############################################################################
