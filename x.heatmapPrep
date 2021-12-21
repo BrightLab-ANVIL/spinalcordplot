@@ -135,7 +135,7 @@ cd ${data_path}
 # Calculate functional mean image for visualizations later
 fslmaths ${func} -Tmean func_mean.nii.gz
 # The data_path should be the "label" folder containing these PAM50 files
-input=template/PAM50_cord.nii.gz # cord mask
+cord=template/PAM50_cord.nii.gz # cord mask
 levels=template/PAM50_levels.nii.gz # vertebral levels (NOT CORD)
 # Do checks then initialize mask descriptions log file
 if [[ -f "${outputdir}/maskDescriptions.txt" ]]; then
@@ -202,7 +202,7 @@ if [[ ${include_CSF} -eq 1 ]]; then
   # In sct 4.2.2 sct_maths used : -erode 3,3,1. Updated to sct v. 5.2.0 : -erode 1 -shape disk -dim 2
   sct_maths -i ${csfCord} -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
   sct_maths -i ${csfCord} -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
-  sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${input}
+  sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${cord}
   fslmaths ${outputdir}/sub_cord_TEMP.nii.gz -thr 0 -bin ${outputdir}/mask${o}.nii.gz
   fslstats ${outputdir}/mask${o}.nii.gz -m >> ${outputdir}/mask_averages.txt
   mask_avg=$( tail -1 ${outputdir}/mask_averages.txt )
@@ -215,7 +215,7 @@ if [[ ${include_CSF} -eq 1 ]]; then
     o=$(( o+1 ))
     sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
     sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
-    sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${input}
+    sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${cord}
     fslmaths ${outputdir}/sub_cord_TEMP.nii.gz -thr 0 -bin ${outputdir}/mask${o}.nii.gz
     fslstats ${outputdir}/mask${o}.nii.gz -m >> ${outputdir}/mask_averages.txt
     mask_avg=$( tail -1 ${outputdir}/mask_averages.txt )
@@ -242,15 +242,15 @@ if [[ ${include_CSF} -eq 1 ]]; then
 elif [[ include_CSF -eq 0 ]]; then
   echo "\n OK, no CSF. \n"
 fi
-exit 1
+# exit 1 #DELETE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ###############################################################################
 # WM EROSION AND MASK CREATION:
 ###############################################################################
 # Create first mask using full cord mask:
 # Erode voxel layer from outer edges
-sct_maths -i ${input} -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
+sct_maths -i ${cord} -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
 # Subtract erosion from full mask to get only outer edge mask
-sct_maths -i ${input} -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
+sct_maths -i ${cord} -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
 # Subtract gm mask from mask to have no gm/wm overlap
 sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_gm_TEMP.nii.gz -sub ${gm}
 # Threshold out negative values (from previous step)
@@ -323,7 +323,7 @@ do
 done
 ###############################################################################
 # Calculate DVARS trace using PAM50_cord as the mask
-3dTto1D -input ${func} -mask ${input} -method dvars -prefix ${outputdir}/dvars.txt
+3dTto1D -input ${func} -mask ${cord} -method dvars -prefix ${outputdir}/dvars.txt
 ###############################################################################
 # Extract 8 largest tracts by volume, binarize then extract ts (WIP)
 # Binarize masks
@@ -352,10 +352,10 @@ if [[ ${smooth} -eq 1 ]]; then
   echo "\nSmoothing was requested. Beginning smoothing... \n"
   # Blur in cord mask (Find a way to automate this (maybe fslroi?)):
   echo "\nDelete top and bottom slice in mask (for smoothing).\nOverwrite file when saving (PAM50_cord_forSmoothing.nii.gz).\n"
-  cp ${input} template/PAM50_cord_forSmoothing.nii.gz
+  cp ${cord} template/PAM50_cord_forSmoothing.nii.gz
   blurMask=template/PAM50_cord_forSmoothing.nii.gz
   fsleyes ${blurMask}
-  # Loop through -k input to retrive x,y,z FWHM kernel values
+  # Loop through -k cord to retrive x,y,z FWHM kernel values
   # MAKE THIS SO THAT IT ONLY GOES THROUGH THIS LOOP IF THE INPUT IS LENGH STRLENGTH=5
   if [[ ${smooth} -eq 1 && ${STRLENGTH} -eq 5 ]]; then
     # If anisotropic:
