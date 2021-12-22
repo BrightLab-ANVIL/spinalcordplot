@@ -13,7 +13,7 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 % write_out----------->  1 or 0: 1 will write out files to current folder                        
 % bySlice ------------>  1 or 0: 1 will sort the heatmap by slice, 0 will sort by tissue type
 % useLevels ---------->  1 or 0: 1 will indicate vertebral levels on plot, 0 will not. 
-%                        WARNING: only use this if CSF is not included in masks
+%                        WARNING: Only use this if not including CSF!
 % TR ----------------->  TR in seconds
 % prefix ------------->  regressor/trace file prefix  -  e.g. 'sub-03'
 % trace_loc ---------->  full path to folder with physiological, task or other traces
@@ -79,6 +79,11 @@ end
 close all
 addpath(input_folder)
 addpath(trace_loc)
+% Check whether plotting CSF & using useLevels
+maskDescrip=fileread([input_folder '/maskDescriptions.txt']);
+if contains(maskDescrip,'CEREBROSPINAL FLUID') && useLevels==1
+    error('When including CSF in heatmap, useLevels cannot = 1.')
+end
 fprintf('\nBeginning... \n \n')
 %% Load data
 if options.PlotSmoothData==0
