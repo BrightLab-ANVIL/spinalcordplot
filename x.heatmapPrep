@@ -18,16 +18,19 @@ USAGE
   zsh x.heatmapPrep -i ~/data/sub-01/label -f ~/data/sub-01/func.nii.gz -o heatmap_output [-s] [-k x,y,z]
 
 MANDATORY ARGUMENTS
-  -i <input folder>       full path to label folder - contains the PAM50 template
-                          warped to the functional space (from sct_warp_template)
   -f <functional data>    full path to functional data file (same file used for SCT registration)
   -o <output folder>      desired name of output folder
+      **Either -i or -m is mandatory, but including both will only use -m**
 
 OPTIONAL ARGUMENTS
+  -i <input folder>       full path to label folder - contains the PAM50 template
+                          warped to the functional space (from sct_warp_template)
+  -m <mask>               full path to binary mask (spinal cord, etc.) to include
   -s                      smooth data with mask of spinal cord using AFNI 3dblurinmask [Default: no smoothing]
   -k <kernel>             define FWHM of isotropic or anisotropic smoothing kernel [Default: 2,2,6]
                           E.g. anisotropic: -k 2,2,6 ; isotropic -k 3
   -c {0,1}                include CSF masks (doesn't work with vertebral levels) [Default: ask user]
+
 
 EOF
 }
@@ -43,7 +46,7 @@ outputdir=
 smooth=0
 include_CSF=2
 fwhm=2,2,6 #####default value , make this compatible
-while getopts ':hi:f:o:sk:c:' OPTION; do
+while getopts ':hi:f:o:sk:c:m:' OPTION; do
   case $OPTION in
     h)
           usage
@@ -68,6 +71,9 @@ while getopts ':hi:f:o:sk:c:' OPTION; do
     c)
           include_CSF=${OPTARG}
           ;;
+    m)
+          sc_mask=${OPTARG}
+          ;;
     ?)
           echo "\e[91mUnknown flag!! -$OPTARG\e[0m"
           usage
@@ -76,8 +82,8 @@ while getopts ':hi:f:o:sk:c:' OPTION; do
   esac
 done
 # Check inputs exist
-if [[ -z ${data_path} ]]; then
-	 echo "ERROR: Input functional data path not specified. Exiting!\n"
+if [[ -z ${data_path} && -z ${sc_mask} ]]; then
+	 echo "ERROR: Label folder or mask path not specified. Exiting!\n"
      exit 1
 fi
 if [[ -z ${func} ]]; then
@@ -123,21 +129,22 @@ fi
 ################################################################################
 # End of checks, beginning analysis
 ################################################################################
-# Change directory to func folder and create output directory
-cd ${data_path}
-echo "\nLooking at functional data in... ${data_path} \n"
-mkdir ../${output_folder}
-echo '\nCreated new output directory called: ' ${output_folder} '\n'
-cd ../${output_folder}
+# # Change directory to func folder and create output directory - need to do this mask thing...
+# cd ${data_path}
+# echo "\nLooking at functional data in... ${data_path} \n"
+# mkdir ../${output_folder}
+# echo '\nCreated new output directory called: ' ${output_folder} '\n'
+# cd ../${output_folder}
+
+
+# p=abc/def/ghi/jkl.nii.gz # func
+func_dir=`dirname ${func}`
+echo "${func_dir}"
+mkdir ${func_dir}/${output_folder}
+cd ${func_dir}/${output_folder}
 outputdir=`pwd`
-cd ${data_path}
-# All inputs are data in functional space
-# Calculate functional mean image for visualizations later
-fslmaths ${func} -Tmean func_mean.nii.gz
-# The data_path should be the "label" folder containing these PAM50 files
-cord=template/PAM50_cord.nii.gz # cord mask
-levels=template/PAM50_levels.nii.gz # vertebral levels (NOT CORD)
-# Do checks then initialize mask descriptions log file
+
+# Do checks then
 if [[ -f "${outputdir}/maskDescriptions.txt" ]]; then
     echo -n "Looks like you've already done this analysis, continuing will cause files to be overwritten. Would you like to continue? \e[42mEnter y or n:\e[0m "
     read CONT
@@ -150,7 +157,38 @@ if [[ -f "${outputdir}/maskDescriptions.txt" ]]; then
       echo -e "\e[91mInput not recognized. Exiting!\e[0m\n"
     fi
 fi
+# Initialize mask descriptions log file
 date > ${outputdir}/maskDescriptions.txt
+# Check if mask input exists to do ANALYSIS IN MASK
+if [[ -n ${sc_mask} ]]; then
+   echo "Will output tissue timeseries within provided mask.\n"
+   # Add to mask descriptions log file
+   echo "Path to functional data input: ${func}" >> ${outputdir}/maskDescriptions.txt
+   echo "Path to output directory: ${outputdir}" >> ${outputdir}/maskDescriptions.txt
+   echo "" >> ${outputdir}/maskDescriptions.txt
+
+   # Re-Save input mask
+   m=00
+   cp ${sc_mask} ${outputdir}/mask${m}.nii.gz
+   echo "Input mask is mask${m}.nii.gz"
+   # Calculate timeseries for mask:
+   fslmeants -i ${func} -m ${sc_mask} --showall > ${outputdir}/mask${m}ts.txt
+   echo "INPUT MASK" >> ${outputdir}/maskDescriptions.txt
+   echo "mask${m}.nii.gz" >> ${outputdir}/maskDescriptions.txt
+   # Calculate DVARS trace using PAM50_cord as the mask
+   3dTto1D -input ${func} -mask ${sc_mask} -method dvars -prefix ${outputdir}/dvars.txt
+
+     exit 1
+fi
+
+cd ${data_path}
+# All inputs are data in functional space
+# Calculate functional mean image for visualizations later
+fslmaths ${func} -Tmean func_mean.nii.gz
+# The data_path should be the "label" folder containing these PAM50 files
+cord=template/PAM50_cord.nii.gz # cord mask
+levels=template/PAM50_levels.nii.gz # vertebral levels (NOT CORD)
+# Add to mask descriptions file
 echo "Path to analyzed data: ${data_path}" >> ${outputdir}/maskDescriptions.txt
 echo "Path to functional data input: ${func}" >> ${outputdir}/maskDescriptions.txt
 echo "Path to output directory: ${outputdir}" >> ${outputdir}/maskDescriptions.txt
