@@ -13,7 +13,7 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 % write_out----------->  1 or 0: 1 will write out files to current folder                        
 % bySlice ------------>  1 or 0: 1 will sort the heatmap by slice, 0 will sort by tissue type
 % useLevels ---------->  1 or 0: 1 will indicate vertebral levels on plot, 0 will not. 
-%                        WARNING: only use this if CSF is not included in masks
+%                        WARNING: Only use this if not including CSF!
 % TR ----------------->  TR in seconds
 % prefix ------------->  regressor/trace file prefix  -  e.g. 'sub-03'
 % trace_loc ---------->  full path to folder with physiological, task or other traces
@@ -47,11 +47,17 @@ function [heatmap,freqmap,voxelDir]=SCheatmap(input_folder,write_out,bySlice,use
 % voxelDir ----------->  directory of voxels that corresponds to heat map
 %                        
 %
-% NOTE: This script assumes a certain format for the prefix, followed by
+% NOTE 1: This script assumes a certain format for the prefix, followed by
 % the trace name, as follows: 'prefix_Trace.txt'
 %   E.g., Normal trace: 'sub-03_ses-BH_HR.txt'
 %         Convolved trace: 'sub-03_ses-BH_HR_CRFconv.txt'
 %         (similarly, _CO2_HRFconv.txt, _RVT_RRFconv.txt, _O2_HRFconv.txt)
+% 
+% NOTE 2: If you used a mask with -m in x.heatmapPrep, you should use:
+% useLevels=0, bySlice=1
+% 
+% NOTE 3: If you don't want to plot traces, use [] for the trace_loc
+% argument and use "plots", 1 to plot the basic plot.
 % 
 % 
 % Kimberly Hemmerling 2020
@@ -76,9 +82,13 @@ arguments
     options.stim (1,1) string = "-"
     options.slices (1,2) double {mustBeNumeric,mustBeInteger} = [-1 -1]
 end
-close all
 addpath(input_folder)
 addpath(trace_loc)
+% Check whether plotting CSF & using useLevels
+maskDescrip=fileread([input_folder '/maskDescriptions.txt']);
+if contains(maskDescrip,'CEREBROSPINAL FLUID') && useLevels==1
+    error('When including CSF in heatmap, useLevels cannot = 1.')
+end
 fprintf('\nBeginning... \n \n')
 %% Load data
 if options.PlotSmoothData==0
@@ -340,6 +350,7 @@ elseif (options.plots==1) && (bySlice==1)
         set(gca,'XTickLabel',[],'xtick',[],'YTickLabel',[],'ytick',[])
         freqmap=0;
     end
+    freqmap=0;
     fprintf('\nPlotted basic plot... done!\n')
     return
 end
@@ -1066,7 +1077,7 @@ if all(options.moco ~= "-") && (options.plots==2)
 %     saveas(gcf,strcat(input_folder,'/',prefix,'_heatmap_motion_blur',options.PlotSmoothData,'.jpg'))
 end
 %% DVARS plot
-if (options.plots==2)
+if (options.plots==2) && isfile('dvars.txt')
     dvars=load('dvars.txt');
     dvars(1)=NaN;
     figure('Name','DVARS', 'Renderer', 'painters','Position', [50 1000 630 500])
