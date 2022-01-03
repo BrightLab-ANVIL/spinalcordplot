@@ -27,6 +27,7 @@ OPTIONAL ARGUMENTS
   -s                      smooth data with mask of spinal cord using AFNI 3dblurinmask [Default: no smoothing]
   -k <kernel>             define FWHM of isotropic or anisotropic smoothing kernel [Default: 2,2,6]
                           E.g. anisotropic: -k 2,2,6 ; isotropic -k 3
+  -c {0,1}                include CSF masks (doesn't work with vertebral levels) [Default: ask user]
 
 EOF
 }
@@ -40,8 +41,9 @@ scriptname=${0}
 data_path=
 outputdir=
 smooth=0
+include_CSF=2
 fwhm=2,2,6 #####default value , make this compatible
-while getopts ':hi:f:o:sk:' OPTION; do
+while getopts ':hi:f:o:sk:c:' OPTION; do
   case $OPTION in
     h)
           usage
@@ -62,6 +64,9 @@ while getopts ':hi:f:o:sk:' OPTION; do
           ;;
     k)
           fwhm=${OPTARG}
+          ;;
+    c)
+          include_CSF=${OPTARG}
           ;;
     ?)
           echo "\e[91mUnknown flag!! -$OPTARG\e[0m"
@@ -130,7 +135,7 @@ cd ${data_path}
 # Calculate functional mean image for visualizations later
 fslmaths ${func} -Tmean func_mean.nii.gz
 # The data_path should be the "label" folder containing these PAM50 files
-input=template/PAM50_cord.nii.gz # cord mask
+cord=template/PAM50_cord.nii.gz # cord mask
 levels=template/PAM50_levels.nii.gz # vertebral levels (NOT CORD)
 # Do checks then initialize mask descriptions log file
 if [[ -f "${outputdir}/maskDescriptions.txt" ]]; then
@@ -166,25 +171,38 @@ wm=${outputdir}/full_wm_mask.nii.gz
 # Option is prompted in command window for user input. More detailed comments are
 # provided in the WM section below.
 ###############################################################################
-o=0 #output
-i=0 #input
-m=0 #mask
-echo -n "Creating tissue type masks. GM/WM masks will be created. Do you want to include CSF? \e[42mEnter y or n:\e[0m "
-read YN
-if [[ $YN =~ ^([yY])$ ]]; then
+o=00 #output
+i=00 #input
+m=00 #mask
+if [[ ${include_CSF} -eq 2 ]]; then
+    echo -n "Creating tissue type masks. GM/WM masks will be created. Do you want to include CSF? \e[42mEnter y or n:\e[0m "
+    read YN
+    if [[ $YN =~ ^([yY])$ ]]; then
+      include_CSF=1
+    elif [[ $YN =~ ^([nN])$ ]]; then
+      include_CSF=0
+      echo "\n OK, no CSF. \n"
+    else
+      echo -e "\e[91mInput not recognized. Exiting!\e[0m\n"
+      exit 1
+    fi
+fi
+if [[ ${include_CSF} -eq 1 ]]; then
   echo "\n OK, will create CSF masks..."
-  echo -e "\e[1;35m    Edit CSF mask. Fill in full space inside CSF \e[0m"
+  echo -e "\e[1;35m    Edit CSF mask. Fill in top/bottom slices inside CSF \e[0m"
   echo -e "\e[1;35m    Save to same file name. Close window when done. \n \e[0m"
   cp ${outputdir}/full_csf_mask.nii.gz ${outputdir}/csfAndCord_mask.nii.gz
   csfCord=${outputdir}/csfAndCord_mask.nii.gz
   fsleyes ${outputdir}/csfAndCord_mask.nii.gz -cm red-yellow
+  fslmaths ${outputdir}/csfAndCord_mask.nii.gz -fillh ${outputdir}/csfAndCord_mask.nii.gz
+  fsleyes ${outputdir}/csfAndCord_mask.nii.gz -cm red-yellow &
   # After this, ${csfCord} is really csf+gm+wm
   # Erode and make masks (descriptions for each of these steps in WM section)
   # Use cord for subtraction (input)
   # In sct 4.2.2 sct_maths used : -erode 3,3,1. Updated to sct v. 5.2.0 : -erode 1 -shape disk -dim 2
   sct_maths -i ${csfCord} -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
   sct_maths -i ${csfCord} -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
-  sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${input}
+  sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${cord}
   fslmaths ${outputdir}/sub_cord_TEMP.nii.gz -thr 0 -bin ${outputdir}/mask${o}.nii.gz
   fslstats ${outputdir}/mask${o}.nii.gz -m >> ${outputdir}/mask_averages.txt
   mask_avg=$( tail -1 ${outputdir}/mask_averages.txt )
@@ -195,14 +213,20 @@ if [[ $YN =~ ^([yY])$ ]]; then
   while (( ${mask_avg} > 0 ))
   do
     o=$(( o+1 ))
+    if [[ ${o} -le 9 ]]; then
+      o="0"${o}
+    fi
     sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
     sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
-    sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${input}
+    sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_cord_TEMP.nii.gz -sub ${cord}
     fslmaths ${outputdir}/sub_cord_TEMP.nii.gz -thr 0 -bin ${outputdir}/mask${o}.nii.gz
     fslstats ${outputdir}/mask${o}.nii.gz -m >> ${outputdir}/mask_averages.txt
     mask_avg=$( tail -1 ${outputdir}/mask_averages.txt )
     rm ${outputdir}/sub_cord_TEMP.nii.gz ${outputdir}/mask_TEMP.nii.gz
     i=$(( i+1 ))
+    if [[ ${i} -le 9 ]]; then
+      i="0"${i}
+    fi
     echo "CSF mask ${i} with average: " ${mask_avg}
     echo "mask${i}.nii.gz" >> ${outputdir}/maskDescriptions.txt
   done
@@ -221,20 +245,17 @@ if [[ $YN =~ ^([yY])$ ]]; then
   fslmaths ${outputdir}/temp_csf_mask2.nii.gz -thr 0 -bin ${outputdir}/full_csf_mask.nii.gz
   rm ${outputdir}/temp_csf_mask1.nii.gz ${outputdir}/temp_csf_mask2.nii.gz
   csf=${outputdir}/full_csf_mask.nii.gz
-elif [[ $YN =~ ^([nN])$ ]]; then
+elif [[ include_CSF -eq 0 ]]; then
   echo "\n OK, no CSF. \n"
-else
-  echo -e "\e[91mInput not recognized. Exiting!\e[0m\n"
-  exit 1
 fi
 ###############################################################################
 # WM EROSION AND MASK CREATION:
 ###############################################################################
 # Create first mask using full cord mask:
 # Erode voxel layer from outer edges
-sct_maths -i ${input} -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
+sct_maths -i ${cord} -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
 # Subtract erosion from full mask to get only outer edge mask
-sct_maths -i ${input} -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
+sct_maths -i ${cord} -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
 # Subtract gm mask from mask to have no gm/wm overlap
 sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_gm_TEMP.nii.gz -sub ${gm}
 # Threshold out negative values (from previous step)
@@ -254,6 +275,9 @@ echo "mask${o}.nii.gz" >> ${outputdir}/maskDescriptions.txt
 while (( ${mask_avg} > 0 ))
 do
   o=$(( o+1 ))
+  if [[ ${o} -le 9 ]]; then
+    o="0"${o}
+  fi
   sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/erosion${o}.nii.gz -erode 1 -shape disk -dim 2
   sct_maths -i ${outputdir}/erosion${i}.nii.gz -o ${outputdir}/mask_TEMP.nii.gz -sub ${outputdir}/erosion${o}.nii.gz
   sct_maths -i ${outputdir}/mask_TEMP.nii.gz -o ${outputdir}/sub_gm_TEMP.nii.gz -sub ${gm}
@@ -262,6 +286,9 @@ do
   mask_avg=$( tail -1 ${outputdir}/mask_averages.txt )
   rm ${outputdir}/sub_gm_TEMP.nii.gz ${outputdir}/mask_TEMP.nii.gz
   i=$(( i+1 ))
+  if [[ ${i} -le 9 ]]; then
+    i="0"${i}
+  fi
   echo "WM mask ${i} with average: " ${mask_avg}
   echo "mask${i}.nii.gz" >> ${outputdir}/maskDescriptions.txt
 done
@@ -272,18 +299,24 @@ cp ${outputdir}/mask${i}.nii.gz ${outputdir}/checkIfEmpty_wm.nii.gz
 sed "s/mask${i}.nii.gz/------------/" ${outputdir}/maskDescriptions.txt > ${outputdir}/tempTemp.txt
 mv ${outputdir}/tempTemp.txt ${outputdir}/maskDescriptions.txt
 # Calculate timeseries for each mask:
-m=0
+m=00
 for mask in ${outputdir}/mask*.nii.gz
 do
 	echo "Processing mask $m"
   fslmeants -i ${func} -m ${mask} --showall > ${outputdir}/mask${m}ts.txt
   m=$(( m+1 ))
+  if [[ ${m} -le 9 ]]; then
+    m="0"${m}
+  fi
 done
 ###############################################################################
 # Gray matter:
 ###############################################################################
 # No erosion needed for GM because it is quite small already
 m=$(( m-1 ))
+if [[ ${m} -le 9 ]]; then
+  m="0"${m}
+fi
 # Save gray matter mask as last mask #
 cp ${gm} ${outputdir}/mask${m}.nii.gz
 echo "GM mask is mask${m}.nii.gz"
@@ -293,21 +326,30 @@ echo "GRAY MATTER" >> ${outputdir}/maskDescriptions.txt
 echo "mask${m}.nii.gz" >> ${outputdir}/maskDescriptions.txt
 ###############################################################################
 # Create mask visualization file allMaskVisualization.nii.gz
-v=0
-cp ${outputdir}/mask0.nii.gz ${outputdir}/allMaskVisualization.nii.gz
+v=00
+cp ${outputdir}/mask00.nii.gz ${outputdir}/allMaskVisualization.nii.gz
 for mask in ${outputdir}/mask*.nii.gz
 do
-  if (( $v == 0 )); then
+  if (( $v == 00 )); then
+    # Skip mask0 since it was already included as the base
     v=$(( v+1 ))
+    if [[ ${v} -le 9 ]]; then
+      v="0"${v}
+    fi
   else
     v=$(( v+1 ))
+    if [[ ${v} -le 9 ]]; then
+      v="0"${v}
+    fi
+    echo "${v}"
+    echo "\n ${mask}"
     fslmaths ${mask} -mul $v -add ${outputdir}/allMaskVisualization.nii.gz ${outputdir}/temp.nii.gz
     cp ${outputdir}/temp.nii.gz ${outputdir}/allMaskVisualization.nii.gz
   fi
 done
 ###############################################################################
 # Calculate DVARS trace using PAM50_cord as the mask
-3dTto1D -input ${func} -mask ${input} -method dvars -prefix ${outputdir}/dvars.txt
+3dTto1D -input ${func} -mask ${cord} -method dvars -prefix ${outputdir}/dvars.txt
 ###############################################################################
 # Extract 8 largest tracts by volume, binarize then extract ts (WIP)
 # Binarize masks
@@ -336,10 +378,10 @@ if [[ ${smooth} -eq 1 ]]; then
   echo "\nSmoothing was requested. Beginning smoothing... \n"
   # Blur in cord mask (Find a way to automate this (maybe fslroi?)):
   echo "\nDelete top and bottom slice in mask (for smoothing).\nOverwrite file when saving (PAM50_cord_forSmoothing.nii.gz).\n"
-  cp ${input} template/PAM50_cord_forSmoothing.nii.gz
+  cp ${cord} template/PAM50_cord_forSmoothing.nii.gz
   blurMask=template/PAM50_cord_forSmoothing.nii.gz
   fsleyes ${blurMask}
-  # Loop through -k input to retrive x,y,z FWHM kernel values
+  # Loop through -k cord to retrive x,y,z FWHM kernel values
   # MAKE THIS SO THAT IT ONLY GOES THROUGH THIS LOOP IF THE INPUT IS LENGH STRLENGTH=5
   if [[ ${smooth} -eq 1 && ${STRLENGTH} -eq 5 ]]; then
     # If anisotropic:
@@ -366,12 +408,15 @@ if [[ ${smooth} -eq 1 ]]; then
     echo "Isotropic smoothing complete."
   fi
   # Calculate blurred timeseries for each mask (use for restricted or undrestricted methods)
-  m=0
+  m=00
   for mask in ${outputdir}/mask*.nii.gz
   do
   	echo "Processing mask $m in func_blur_cord.nii.gz"
     fslmeants -i ${outputdir}/func_blur_cord.nii.gz -m ${mask} --showall > ${outputdir}/blur_mask${m}ts.txt
     m=$(( m+1 ))
+    if [[ ${m} -le 9 ]]; then
+      m="0"${m}
+    fi
   done
 fi
 
