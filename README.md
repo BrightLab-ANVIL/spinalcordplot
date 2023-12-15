@@ -4,7 +4,7 @@ Repository containing preliminary code and example data to create heatmaps for t
 ---
 
 [![Twitter URL](https://img.shields.io/twitter/follow/KJHemm?style=social)](https://twitter.com/KJHemm)
-[![MIT License](https://img.shields.io/apm/l/atomic-design-ui.svg?)](https://github.com/BrightLab-ANVIL/spinalcordplot/blob/main/LICENSE)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/BrightLab-ANVIL/spinalcordplot/blob/main/LICENSE)
 <br>
 
 #### Guide to this repository:
